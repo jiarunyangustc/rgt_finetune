@@ -1,0 +1,10 @@
+torch>=2.0
+numpy
+scipy
+scikit-image
+matplotlib
+tqdm
+pillow
+loralib
+mmcv
+pyseistr

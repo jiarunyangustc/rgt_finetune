@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+checkpoints/
+models_glp/weights/
+*.dat
+*.npy
+*.npz
+*.log
+logs*/
+qc_overlays/
