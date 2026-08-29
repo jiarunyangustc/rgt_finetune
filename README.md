@@ -103,14 +103,17 @@ and a conversion example.
 
 Two weight files are required for field-data fine-tuning:
 
-- `models_glp/weights/mit_b4.pth`: ImageNet-pretrained MiT-b4 encoder weights;
-- an RGT-pretrained checkpoint, supplied through `pretrained_checkpoint` in
-  the experiment configuration.
+- `models_glp/weights/mit_b4.pth`: ImageNet-pretrained MiT-b4 encoder weights,
+  released by the SegFormer authors. Download `mit_b4.pth` from the official
+  [SegFormer repository](https://github.com/NVlabs/SegFormer#training) and
+  place it under `models_glp/weights/`.
+- `rgt_pretrained.pth`: the RGT-pretrained checkpoint (233 MB, model weights
+  only; MD5 `a5c5c729463aff32f07e8085fca0b797`), available from this
+  repository's [Releases page](https://github.com/jiarunyangustc/rgt_finetune/releases).
+  Point `pretrained_checkpoint` in the experiment configuration to it.
 
-The RGT-pretrained checkpoint will be deposited with the public release. The
-training code now raises a clear error when it is absent instead of silently
-starting from random weights. Weight provenance and checksums should be added
-to [`docs/reproduction.md`](docs/reproduction.md) before archiving a release.
+The training code raises a clear error when the RGT-pretrained checkpoint is
+absent instead of silently starting from random weights.
 
 ## Running a paper configuration
 
@@ -165,5 +168,4 @@ components retain upstream non-commercial research restrictions. See
 [`LICENSE`](LICENSE), [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), and
 source-file headers before redistribution or reuse.
 
-Citation metadata are provided in [`CITATION.cff`](CITATION.cff). Please update
-the DOI and repository URL after archival publication.
+Citation metadata are provided in [`CITATION.cff`](CITATION.cff).

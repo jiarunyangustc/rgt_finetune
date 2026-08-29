@@ -9,7 +9,7 @@ authors:
     given-names: Xinming
   - family-names: Gao
     given-names: Hui
-repository-code: "https://github.com/REPLACE_WITH_ACCOUNT/rgt_finetune_release"
+repository-code: "https://github.com/jiarunyangustc/rgt_finetune"
 version: 0.1.0
 date-released: 2026-08-26
 keywords:
