@@ -4,6 +4,46 @@ Official implementation accompanying the manuscript **“Fine-tuning a
 pretrained network with multi-source information constraints for relative
 geologic time estimation in field seismic data.”**
 
+![Workflow](docs/figs/workflow.png)
+
+## Abstract
+
+Seismic horizon interpretation is fundamental to structural and
+stratigraphic interpretation. A relative geologic time (RGT) volume stores
+multiple seismic horizons in a single 3-D volume, allowing individual
+horizons to be extracted as RGT level sets. Existing deep-learning methods
+face three practical challenges in field applications. First, differences
+between the features of training data and field seismic data can lead to
+inaccurate RGT estimates. Second, fully 3-D networks require large GPU
+memory, while memory-efficient 2-D section methods may produce inconsistent
+3-D results after stacking independent predictions. Third, prediction
+accuracy can decrease when the input size used for inference differs from
+that used in training. We present a lightweight fine-tuning framework built
+on a 2-D section network to obtain accurate and continuous 3-D RGT volumes
+without the memory burden of a fully 3-D network. The framework combines
+three types of target-survey information that cover different parts of the
+volume. Interpreted horizons provide sparse but reliable survey-scale
+constraints, automatically tracked reflection segments supply dense local
+isochron constraints between those horizons, and local dips enforce
+dip-compensated consistency between adjacent predictions. Evaluation on two
+field surveys, using validation horizons excluded from the horizon input
+and constraint, shows that the complete scheme substantially reduces the
+volume mean absolute error relative to direct prediction with the
+pretrained network. The experiments further show that direct prediction
+becomes much less accurate when the target input size differs from that
+used in pretraining, while the proposed fine-tuning effectively restores
+RGT accuracy. The orthogonal-direction structure constraint also enables
+the network to maintain comparable accuracy with a smaller mini-batch while
+reducing peak training memory by approximately 75%.
+
+![Field example](docs/figs/field_example.png)
+
+*Effect of adding each constraint on a field survey: predicted RGT,
+extracted isochrons, and the fit to input and withheld validation horizons
+(numbers are mean absolute vertical errors in samples).*
+
+## Method overview
+
 The method adapts a pretrained 2-D, section-wise relative geologic time (RGT)
 network directly to a target 3-D seismic survey. It combines three sources of
 survey information:
