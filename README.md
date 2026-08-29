@@ -36,12 +36,6 @@ RGT accuracy. The orthogonal-direction structure constraint also enables
 the network to maintain comparable accuracy with a smaller mini-batch while
 reducing peak training memory by approximately 75%.
 
-![Field example](docs/figs/field_example.png)
-
-*Effect of adding each constraint on a field survey: predicted RGT,
-extracted isochrons, and the fit to input and withheld validation horizons
-(numbers are mean absolute vertical errors in samples).*
-
 ## Method overview
 
 The method adapts a pretrained 2-D, section-wise relative geologic time (RGT)
