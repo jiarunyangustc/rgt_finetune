@@ -27,9 +27,9 @@ constraints, automatically tracked reflection segments supply dense local
 isochron constraints between those horizons, and local dips enforce
 dip-compensated consistency between adjacent predictions. Evaluation on two
 field surveys, using validation horizons excluded from the horizon input
-and constraint, shows that the complete scheme substantially reduces the
-volume mean absolute error relative to direct prediction with the
-pretrained network. The experiments further show that direct prediction
+and constraint, shows that the complete scheme reduces the volume mean
+absolute error by 65.3% and 73.7%, respectively, relative to direct
+prediction with the pretrained network. The experiments further show that direct prediction
 becomes much less accurate when the target input size differs from that
 used in pretraining, while the proposed fine-tuning effectively restores
 RGT accuracy. The orthogonal-direction structure constraint also enables
