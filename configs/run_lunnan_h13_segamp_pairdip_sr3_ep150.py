@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# 单变量对照：与 lunnan 最终配方 segamp_pair 唯一差别 = pair 换 dip 补偿版
-# （δ 场 = PWD 沿 il 跨片方向, make_pair_dip_lunnan.py, 互相关仲裁+地震warp单测通过）。
-# 目的：论文防御——"沿构造方向一致"一般式在第二真实工区同样退化等价。
+
+
+
 from train_finetune_only import run_experiment
 
 

@@ -30,9 +30,14 @@ from draw import *
 
 # from adbinloss import SILogLoss, BinsChamferLoss
 
-from ssim import SSIMLoss as ssim
-from ssim import MultiScaleSSIMLoss as mssim
-from ssim import MultiScaleSSIMLoss3d as mssim_3d
+try:
+    # Optional legacy losses used by pretraining utilities, not by the
+    # target-survey fine-tuning experiments released with this paper.
+    from ssim import SSIMLoss as ssim
+    from ssim import MultiScaleSSIMLoss as mssim
+    from ssim import MultiScaleSSIMLoss3d as mssim_3d
+except ImportError:
+    ssim = mssim = mssim_3d = None
 from scipy.ndimage import gaussian_filter
 
 
@@ -48,7 +53,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 def compute_error(output, target):
     abs_diff = np.abs(output - target)
     mse = float((np.power(abs_diff, 2)).mean())
-    rmse = math.sqrt(mse)                                                                                                                       
+    rmse = math.sqrt(mse)
     mae = float(abs_diff.mean())
     return mse, mae
 
@@ -80,37 +85,37 @@ def compute_hrzs_error(samples):
             for k in range(len(e_f)):
                 if e_f[k] < 6.0:
                     e += e_f[k]
-                    c += 1  
+                    c += 1
             if c > 0:
                 hrz_error.append(e/c)
-        
+
         merror[i] = np.array(hrz_error).mean()
-        print(f"样本{i}误差:{merror[i]}")
-    print(f"平均误差:{merror.mean()}") 
+        print(f"sample {i} error: {merror[i]}")
+    print(f"mean error: {merror.mean()}")
     return merror
 
 
 
 def min_max_norm_per_sample(x):
     # x.shape = [N, C, H, W] -> [10, 1, 512, 512]
-    
-    # 1. 计算每个样本的最小值和最大值
-    # dim=(1, 2, 3) 表示聚合 Channel, Height, Width
-    # keepdim=True 保持形状为 [10, 1, 1, 1]，方便后续广播
+
+
+
+
     min_val = x.amin(dim=(1, 2, 3), keepdim=True)
     max_val = x.amax(dim=(1, 2, 3), keepdim=True)
-    
-    # 2. 计算分母 (最大值 - 最小值)
-    # 加上 1e-8 是为了防止 max == min (纯色图像) 导致除以 0
+
+
+
     delta = max_val - min_val + 1e-8
-    
-    # 3. 应用公式
+
+
     x_norm = (x - min_val) / delta
-    
+
     return x_norm
 
 def get_rgt_init_from_rx_field_data(fx,mx,sample_width,rgt_values):
-    
+
     f1 = np.zeros(mx.shape)
     f2 = np.zeros(mx.shape,dtype = np.single)
     mx_single = np.zeros(mx.shape,dtype = np.single)
@@ -130,9 +135,9 @@ def get_rgt_init_from_rx_field_data(fx,mx,sample_width,rgt_values):
                     mx_single[i,k,j] =1
 #                     mx_single_all[k,j] = 1
                     break
-        
+
         x_all,y_all =np.where(f2[i,:,:] !=0)
-        
+
         if len(x_all) ==0:
             continue
         fr_mean += np.int64(f2[i,:,:]!=0)*rgt_values[i]
@@ -157,7 +162,7 @@ def get_rgt_init_from_rx_field_data(fx,mx,sample_width,rgt_values):
     return rgtrm,fxrm,fr_sp,fr_mean,mx_single
 
 
-# 阈值压制
+
 def threshold_filter(predictions, thr=0.01):
     thresholded_preds = predictions[:]
     low_values_indices = thresholded_preds < thr
@@ -166,25 +171,25 @@ def threshold_filter(predictions, thr=0.01):
     thresholded_preds[low_values_indices] = 1
     return thresholded_preds
 
-# 归一化
+
 def assign_min_max_norm(x, m, a):
-    x = (x - m) / (a - m)        
+    x = (x - m) / (a - m)
     return x
 
 def remove_min_max_norm(x, m, a):
-    x = x * (a - m) + m        
+    x = x * (a - m) + m
     return x
 
 def min_max_norm(x):
     if torch.is_tensor(x) and torch.max(x) != torch.min(x):
             x = x - torch.min(x)
-            x = x / torch.max(x)        
+            x = x / torch.max(x)
     elif np.max(x) != np.min(x):
             x = x - np.min(x)
             x = x / np.max(x)
     return x
-    
-# 标准化
+
+
 def mea_std_norm(x):
     if torch.is_tensor(x) and torch.std(x) != 0:
             x = (x - torch.mean(x)) / torch.std(x)
@@ -195,6 +200,8 @@ def mea_std_norm(x):
 class SSIMLoss(nn.Module):
     def __init__(self, channel, filter_size):
         super(SSIMLoss, self).__init__()
+        if mssim is None:
+            raise ImportError('The optional legacy ssim.py module is required for SSIMLoss')
         self.ssim = mssim(channel=channel, filter_size=filter_size)
     def forward(self, output, target, mask=None):
         loss = (1 - self.ssim(output, target, mask))
@@ -203,6 +210,8 @@ class SSIMLoss(nn.Module):
 class SSIMLoss3d(nn.Module):
     def __init__(self, channel, filter_size):
         super().__init__()
+        if mssim_3d is None:
+            raise ImportError('The optional legacy ssim.py module is required for SSIMLoss3d')
         self.ssim = mssim_3d(channel=channel, filter_size=filter_size)
     def forward(self, output, target, mask=None):
         loss = (1 - self.ssim(output, target, mask))
@@ -210,7 +219,7 @@ class SSIMLoss3d(nn.Module):
 
 # class SSIMLoss3d(nn.Module):
 #     def __init__(self, channel, filter_size):
-#         super().__init__()  # 推荐这种写法
+
 #         self.ssim = mssim_3d(channel=channel, filter_size=filter_size)
 
 #     def forward(self, x, y):
@@ -219,6 +228,8 @@ class SSIMLoss3d(nn.Module):
 class MMSESSIMLoss(nn.Module):
     def __init__(self, channel, filter_size):
         super(MMSESSIMLoss, self).__init__()
+        if mssim is None:
+            raise ImportError('The optional legacy ssim.py module is required for MMSESSIMLoss')
         self.mse = nn.MSELoss(reduction="sum")
         self.ssim = mssim(channel=channel, filter_size=filter_size)
     def forward(self, output, target, mask=None):
@@ -238,7 +249,7 @@ class MSELoss(nn.Module):
 #     def __init__(self):
 #         super(hr_loss, self).__init__()
 #         self.name = 'hr_loss'
- 
+
 #     def forward(self, mx_single, pred):
 #         pred_fr = mx_single * pred
 #         total_error = 0.0
@@ -251,7 +262,7 @@ class MSELoss(nn.Module):
 #             total_error += torch.sum(error)
 #             total_count += error.numel()
 
-#         # 计算总的平均误差
+
 #         mean_error = total_error / total_count
 #         return mean_error
 # class hr_loss(nn.Module):
@@ -268,8 +279,8 @@ class MSELoss(nn.Module):
 #         fxx_mean = fx_mean.clone()
 #         fx_mean[fx_mean!=0]=1
 #         ls = torch.sum(abs(fx_mean*pred-fxx_mean)**2)/len(x)
-#         return ls   
-         
+#         return ls
+
 # class hr_loss(nn.Module):
 #     def __init__(self):
 #         super(hr_loss,self).__init__()
@@ -286,7 +297,7 @@ class MSELoss(nn.Module):
 # # #             ls = torch.sum(abs(fx_mean*pred-fxx_mean)**2)/len(x)
 # # #         else:
 # # #             ls = 0
-# # #         return ls   
+# # #         return ls
 #     def forward(self,mx_single,pred):
 # #         pred = nn.functional.interpolate(pred, mx.shape[-2:], mode='bilinear', align_corners=True).to(pred.device)
 #         pred_fr = mx_single*pred
@@ -297,35 +308,38 @@ class MSELoss(nn.Module):
 #             y_mean = torch.sum(pred_fr[i])/torch.sum(mx_single[i])
 #             mx_c[i] = mx_c[i]*y_mean
 #         m_mean = abs(pred_fr-mx_c)/torch.sum(mx_single[i])
-        
+
 
 #         return m_mean
-class hr_loss(nn.Module): 
-    def __init__(self): 
-        super(hr_loss, self).__init__() 
-        self.name = 'hr_loss' 
+class hr_loss(nn.Module):
+    def __init__(self):
+        super(hr_loss, self).__init__()
+        self.name = 'hr_loss'
 
-    def forward(self, mx_single, pred): 
-        pred_fr = mx_single * pred  # 遮罩下的预测值
+    def forward(self, mx_single, pred):
+        pred_fr = mx_single * pred
         loss = 0.0
-        # print(mx_single.shape)  # 打印输入掩码形状，调试用
 
-        for i in range(mx_single.shape[0]):  # 对 batch 中每个样本遍历
+
+        for i in range(mx_single.shape[0]):
             if torch.sum(mx_single[i]) == 0:
                 continue
-            y_mean = torch.sum(pred_fr[i]) / torch.sum(mx_single[i])  # 计算该mask区域的平均预测值
-            mx_c_i = mx_single[i] * y_mean  # 构造一个均值张量
-            diff = torch.abs(pred_fr[i] - mx_c_i)  # 计算偏差
-            loss += torch.sum(diff) / torch.sum(mx_single[i])  # 累加每个样本的loss
+            y_mean = torch.sum(pred_fr[i]) / torch.sum(mx_single[i])
+            mx_c_i = mx_single[i] * y_mean
+            diff = torch.abs(pred_fr[i] - mx_c_i)
+            loss += torch.sum(diff) / torch.sum(mx_single[i])
 
-        return loss / mx_single.shape[0]  # 返回 batch 的平均 los
+        return loss / mx_single.shape[0]
 
 
 
 def hz_depth_px_monitor(mx_single, pred, eps=1e-4):
-    """深度当量层位监控(诊断量, 不参与训练): 对每条层位,
-    |tau - 批内均值| / (|dtau/dz| + eps) 的均值, 单位=深度采样。
-    分子分母同源缩放会抵消, 免疫"梯度压扁"造成的 tau 单位假收敛。"""
+    """Return a diagnostic horizon misfit in depth samples.
+
+    The measure is ``mean(|tau-tau_mean|/(|dtau/dz|+eps))``. Scaling of the
+    numerator and denominator cancels, so shrinking the RGT gradient cannot
+    produce artificial convergence. This diagnostic is not a training loss.
+    """
     with torch.no_grad():
         gz = torch.zeros_like(pred)
         gz[..., 1:-1, :] = (pred[..., 2:, :] - pred[..., :-2, :]) / 2.0
@@ -348,7 +362,7 @@ class STRUCTURELossv2(nn.Module):
         self.use_ep = use_ep
         self.ep = ep
     def forward(self,z):
-    #利用 torch.gradient
+
         vp1,vp2,vp3 = torch.gradient(z)
         vp = torch.stack([vp1,vp2,vp3])
         if self.use_ep:
@@ -366,9 +380,9 @@ class STRUCTURELossu_rgt(nn.Module):
         self.u = u1
         self.cos = torch.nn.CosineSimilarity(0,eps=1e-6)
     def forward(self,r_g):
-    #利用 torch.gradient
+
         vp= r_g
-        
+
         cosx = torch.abs(self.cos(vp,self.u))
         return  1-torch.mean(cosx)
 
@@ -397,7 +411,7 @@ class ceb_loss(nn.Module):
 #         return torch.where(torch.equal(count_pos, 0.0), 0.0, ceb_loss)
         return ceb_loss
 
-    
+
 class CB_loss(nn.Module):
     def __init__(self,beta,gamma,epsilon=0.1):
         super(CB_loss, self).__init__()
@@ -456,26 +470,26 @@ class CB_loss(nn.Module):
             pred = logits.softmax(dim = 1)
             cb_loss = F.binary_cross_entropy(input = pred, target = labels_one_hot, weight = weights)
         return cb_loss
-    
-    
+
+
 class DiceLoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(DiceLoss, self).__init__()
 
     def forward(self, inputs, targets, smooth=1e-5):
-        
+
         #comment out if your model contains a sigmoid or equivalent activation layer
-        inputs = torch.sigmoid(inputs)       
-        
+        inputs = torch.sigmoid(inputs)
+
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
         targets = targets.view(-1)
-        
-        intersection = (inputs * targets).sum()                            
-        dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
-        
+
+        intersection = (inputs * targets).sum()
+        dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)
+
         return 1 - dice
-# 定义数据集
+
 
 class build_dataset_rgt(Dataset):
     def __init__(self, samples_list, dataset_path, mode, possible_num_hrzs, hrz_grp, bit, sample_rate,
@@ -498,16 +512,16 @@ class build_dataset_rgt(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        
+
         sample_file = self.samples_list[idx]
         sample_file_path = os.path.join(self.dataset_path, sample_file)
         sample_dict = np.load(sample_file_path, allow_pickle=True).item()
-        
+
         sample_output = {}
-        
+
         if self.mode in ['Train', 'Valid']:
             sx, ux, fl = sample_dict['seis'], sample_dict['rgt'], sample_dict['fault']
-            fx, rx,mx = get_train_sample_from_rgt(ux, self.possible_num_hrzs, self.hrz_grp, self.bit, self.sample_rate, fl=fl) 
+            fx, rx,mx = get_train_sample_from_rgt(ux, self.possible_num_hrzs, self.hrz_grp, self.bit, self.sample_rate, fl=fl)
             sx = mea_std_norm(sx)
             rgt_init,fxrm,fx_sp,fx_mean,mx_single = get_rgt_init_from_rx(fx,mx,self.sample_rate)
             sample_output['rgt'] = rx[np.newaxis,:,:].astype(np.single)*self.max
@@ -528,25 +542,25 @@ class build_dataset_rgt(Dataset):
 #             sample_output['seis_m'] = ((1-b)*sx)[np.newaxis,:,:].astype(np.single)
             sample_output['fault'] = fl[np.newaxis,:,:].astype(np.single)
             fl_p = fl.copy()
-            max_f = int(np.max(fl_p).item())  # 获取最大断层编号
-            if max_f > 0:  # 确保至少有一个断层
-                fl_num = random.randint(1, max_f)  # 生成[1, max_f]间的一个随机数
-                fl_idx = random.sample(range(1, max_f + 1), fl_num)  # 从[1, max_f]中随机选择fl_num个不同的断层编号
+            max_f = int(np.max(fl_p).item())
+            if max_f > 0:
+                fl_num = random.randint(1, max_f)
+                fl_idx = random.sample(range(1, max_f + 1), fl_num)
                 for j in range(1, max_f + 1):
                     if j in fl_idx:
-                        fl_p[fl_p == j] = 1  # 如果j在选择的断层编号中，将相应位置设为1
+                        fl_p[fl_p == j] = 1
                     else:
-                        fl_p[fl_p == j] = 0  # 否则，将相应位置设为0      
+                        fl_p[fl_p == j] = 0
             sample_output['fault_p'] = fl_p[np.newaxis,:,:].astype(np.single)
-            
+
         elif self.mode == 'Infer':
             sx, ux, fl = sample_dict['seis'], sample_dict['rgt'], sample_dict['fault']
-            fx, _ = get_train_sample_from_rgt(ux, self.possible_num_hrzs, self.hrz_grp, fl=fl) 
+            fx, _ = get_train_sample_from_rgt(ux, self.possible_num_hrzs, self.hrz_grp, fl=fl)
             sx = min_max_norm(sx)
             sample_output['frame'] = fx[np.newaxis,:,:].astype(np.single)
             sample_output['seis'] = sx[np.newaxis,:,:].astype(np.single)
             sample_output['fault'] = fl[np.newaxis,:,:].astype(np.single)
-         
+
 
         sample_output["mask"] = sample_output['frame'].astype(np.bool_).astype(np.single)
 #         mx_len = np.zeros((5,mx.shape[0]),dtype =np.single)
@@ -560,8 +574,8 @@ class build_dataset_rgt(Dataset):
 #                 else:
 #                     mx_len[j,i] = 1
 #         sample_output['mx_len'] = mx_len[np.newaxis,:,:].astype(np.single)
-    
-        return  sample_output  
+
+        return  sample_output
 
 
 def pred_dict_2d23d_rgt_fl(model, samples,values=None):
@@ -570,29 +584,29 @@ def pred_dict_2d23d_rgt_fl(model, samples,values=None):
 
     pred_samples = []
 
-    with torch.no_grad(): 
-        for i, sample_pred in enumerate(samples):     
+    with torch.no_grad():
+        for i, sample_pred in enumerate(samples):
 
             data = mea_std_norm(sample_pred["seis"])
             data = torch.from_numpy(data).unsqueeze(0).float()
             frame = (sample_pred["frame"])
-            frame = torch.from_numpy(frame).unsqueeze(0).float()        
-    
-                        
+            frame = torch.from_numpy(frame).unsqueeze(0).float()
+
+
             sample_pred['mask'] = sample_pred['frame'].astype(np.bool_).astype(np.single)
             mask = torch.from_numpy(sample_pred['mask']).unsqueeze(0).float()
-            
+
             data, frame, mask = data.to(device), frame.to(device), mask.to(device)
             data, frame, mask = Variable(data), Variable(frame), Variable(mask)
 #             data = torch.cat((data, data,data), dim=1)
             data = torch.cat((frame*10, data,data), dim=1)
 
-            target_hr,target_fl= model(data,800) 
+            target_hr,target_fl= model(data,800)
             target_fl = torch.sigmoid(target_fl)
 
-            target_hr = target_hr.cpu().squeeze(0).numpy()   
+            target_hr = target_hr.cpu().squeeze(0).numpy()
             target_fl = target_fl.cpu().squeeze(0).numpy()
-            
+
             sample_pred["pred"] = target_hr/10
             sample_pred["pred_fl"] = (target_fl)
             sample_pred["frame"] =  sample_pred['fr_mean']
@@ -600,7 +614,7 @@ def pred_dict_2d23d_rgt_fl(model, samples,values=None):
 
 
             pred_samples.append(sample_pred)
-            
+
     return pred_samples
 
 
@@ -633,14 +647,14 @@ class build_dataset_rgt_3d(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        
+
         sample_file = self.samples_list[idx]
         sample_file_path = os.path.join(self.dataset_path, sample_file)
         sample_dict = np.load(sample_file_path, allow_pickle=True).item()
-        
+
         sample_output = {}
 
-        # 读取三维数据
+
         sx, ux, fl,segments = sample_dict['seis'], sample_dict['rgt'], sample_dict['fault'], sample_dict['segments']
         if self.crop:
             d, h, w = sx.shape
@@ -648,12 +662,12 @@ class build_dataset_rgt_3d(Dataset):
             sd = random.randint(0, d - cd)
             sh = random.randint(0, h - ch)
             sw = random.randint(0, w - cw)
-            
+
             sx = self.crop_data_3d_with_start(sx, sd, sh, sw)
             ux = self.crop_data_3d_with_start(ux, sd, sh, sw)
             fl = self.crop_data_3d_with_start(fl, sd, sh, sw)
             segments = self.crop_data_3d_with_start(segments, sd, sh, sw)
-        # 对裁剪后的rgt做归一化
+
         sx = mea_std_norm(sx)
         ux = min_max_norm(ux)
 
@@ -666,7 +680,7 @@ class build_dataset_rgt_3d(Dataset):
             # sample_output['frame_sp'] = fx_sp[np.newaxis, ...].astype(np.single) * self.max
             # sample_output['frame_mean'] = fx_mean[np.newaxis, ...].astype(np.single) * self.max
             sample_output['segments'] = segments[np.newaxis, ...].astype(np.single)
-            # 对 mx_single 做 padding
+
             # max_hrzs = max(self.possible_num_hrzs)
             # pad_shape = (1, max_hrzs) + mx_single.shape[1:]  # [1, max_hrzs, D, H, W]
             # mx_single_pad = np.zeros(pad_shape, dtype=np.single)
@@ -676,7 +690,7 @@ class build_dataset_rgt_3d(Dataset):
 
             sample_output['seis'] = sx[np.newaxis, ...].astype(np.single)
             sample_output['fault'] = fl[np.newaxis, ...].astype(np.single)
-            # 断层处理与2D类似
+
             # fl_p = fl.copy()
             # max_f = int(np.max(fl_p).item())
             # if max_f > 0:
@@ -697,7 +711,7 @@ class build_dataset_rgt_3d(Dataset):
 
         # sample_output["mask"] = sample_output['frame'].astype(np.bool_).astype(np.single)
 
-        # 在 return sample_output 之前加
+
         # for k, v in sample_output.items():
         #     if k == "mx":
         #         if isinstance(v, np.ndarray):
@@ -707,7 +721,7 @@ class build_dataset_rgt_3d(Dataset):
         return sample_output
 
 def get_rgt_init_from_rx(fx,mx,sample_width):
-    
+
     f1 = np.zeros(mx.shape)
     f2 = np.zeros(mx.shape,dtype = np.single)
     mx_single = np.zeros(mx.shape,dtype = np.single)
@@ -727,9 +741,9 @@ def get_rgt_init_from_rx(fx,mx,sample_width):
                     mx_single[i,k,j] =1
 #                     mx_single_all[k,j] = 1
                     break
-        
+
         x_all,y_all =np.where(f2[i,:,:] !=0)
-        
+
         if len(x_all) ==0:
             continue
         sum_fr = np.sum(f2[i,:,:])/len(x_all)
@@ -756,10 +770,10 @@ def get_rgt_init_from_rx(fx,mx,sample_width):
 
 def get_train_sample_from_rgt_3d(rx, possible_num_hrzs, hrz_grp, bit=256, sample_rate=2, fl=None):
     """
-    适用于三维数据的训练样本生成函数
+    Generate sparse horizon samples from a 3-D RGT volume.
     rx: 3D numpy array
     fl: 3D numpy array, fault mask
-    返回: fx, rx, mx
+    Returns: fx, rx, mx
     """
     d, h, w = rx.shape
     if fl is None:
@@ -788,7 +802,7 @@ def get_train_sample_from_rgt_3d(rx, possible_num_hrzs, hrz_grp, bit=256, sample
         x, y, z = np.where((ux >= hrzs_idx - sample_rate/2) & (ux < (hrzs_idx + sample_rate/2)))
         # print(f"hrzs_idx={hrzs_idx}, num_points={len(x)}")
         for i in range(len(x)):
-            # 可根据 fl 做断层mask处理
+
             if fl[x[i], y[i], z[i]] > 0:
                 continue
             fx[x[i], y[i], z[i]] = ux[x[i], y[i], z[i]]
@@ -797,11 +811,11 @@ def get_train_sample_from_rgt_3d(rx, possible_num_hrzs, hrz_grp, bit=256, sample
 
 def get_rgt_init_from_rx_3d(fx, mx, sample_width):
     """
-    适用于三维数据的rgt初始化，返回 mx_single
+    Initialize 3-D RGT from sparse horizon masks.
     fx: 3D numpy array
     mx: 4D numpy array (N, D, H, W)
     sample_width: int
-    返回: rgtrm, fxrm, fr_sp, fr_mean, mx_single
+    Returns: rgtrm, fxrm, fr_sp, fr_mean, mx_single
     """
     f1 = np.zeros(mx.shape, dtype=np.single)
     f2 = np.zeros(mx.shape, dtype=np.single)
@@ -866,29 +880,29 @@ class build_dataset_cigfacies(Dataset):
         self.index_attr_list = index_attr_list
         self.seg_mode = seg_mode
         if self.seg_mode == "3d":
-            self.input_attr_list_all = [self.input_attr_list,self.input_attr_list5,self.input_attr_list6,["segments"]]     
+            self.input_attr_list_all = [self.input_attr_list,self.input_attr_list5,self.input_attr_list6,["segments"]]
         elif self.seg_mode == "2d":
             self.input_attr_list_all = [self.input_attr_list,self.input_attr_list2,self.input_attr_list3,
-                                        self.input_attr_list4,self.input_attr_list5,self.input_attr_list6]                        
+                                        self.input_attr_list4,self.input_attr_list5,self.input_attr_list6]
         if mx_valid:
-            self.input_attr_list_all.append(['mask_valid'])    
+            self.input_attr_list_all.append(['mask_valid'])
         if frame_part:
             self.input_attr_list_all.append(['frame_part'])
         self.mode = mode
-        
+
     def __len__(self):
         return len(self.samples_list)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        
+
         sample_file_name = self.samples_list[idx]
         sample_file_path = os.path.join(self.dataset_path, sample_file_name + ".npy")
         sample_dict = np.load(sample_file_path, allow_pickle=True).item()
-        
+
         sample_output = {}
-        
+
         if self.mode in ['Train', 'Valid']:
             for i, input_attr in enumerate(self.input_attr_list_all):
                 # print(input_attr)
@@ -915,27 +929,27 @@ class build_dataset_cigfacies(Dataset):
 
         sample_output["sample_file_path"] = sample_file_path
         return  sample_output
-   
-# 计算 position embedding
+
+
 def pos_embedding(pos_tensor, v_dim, reserve_bit=2):
-    
+
     pos_tensor = np.round(rgt*(10**reserve_bit))
-    
+
     p = pos_tensor.astype(np.float32)
     p = np.expand_dims(p, axis=-1)
     p = p.repeat(v_dim/2, axis=-1)
-    
+
     w = 1. / np.power(10000., 2. * np.arange(v_dim/2. ,dtype=np.float32) / v_dim)
     w = w.astype(np.float32)
-    
+
     wp = w*p
     s = np.sin(wp)
     c = np.cos(wp)
-    
+
     pos_embed = np.concatenate([s,c], axis=-1)
     return pos_embed
 
-# 读取数据体
+
 def read_cube(data_path, data_file, num_inline, num_crossline):
     data_file = os.path.join(data_path, data_file+".dat")
     print(data_file)
@@ -946,7 +960,7 @@ def read_cube(data_path, data_file, num_inline, num_crossline):
     else:
         return None
 
-# 曲线光滑函数
+
 def smooth(v, w=0.85):
     last = v[0]
     smoothed = []
@@ -956,7 +970,7 @@ def smooth(v, w=0.85):
         last = smoothed_val
     return smoothed
 
-# 训练和验证
+
 
 
 
@@ -971,16 +985,16 @@ class WarmupCosineAnnealingLR(_LRScheduler):
         super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
-        # 当前 epoch
+
         current_epoch = self.last_epoch + 1
         lrs = []
 
         for base_lr in self.base_lrs:
             if current_epoch < self.warmup_epochs:
-                # warm-up 阶段：线性上升
+
                 lr = base_lr * current_epoch / self.warmup_epochs
             else:
-                # cosine annealing 阶段
+
                 progress = (current_epoch - self.warmup_epochs) / (self.total_epochs - self.warmup_epochs)
                 cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
                 lr = self.lr_min + (base_lr - self.lr_min) * cosine_decay
@@ -990,12 +1004,13 @@ class WarmupCosineAnnealingLR(_LRScheduler):
 
 def train_valid_net(param, model, train_data, valid_data, criterion=None,criterion_fl=None, input_attrs=["data"], output_attrs=["label"],
                     plot=True,mtl = False,transfer=None,pr_de = False,facies=True):
-    
-    #初始化参数
+
+
     epochs = param['epochs']
     warm_up = param['warm_up']
     warm_up_epochs = param['warm_up_epochs']
     batch_size = param['batch_size']
+    num_workers = int(param.get('num_workers', 4))
     lr = param['lr']
     lr_patience = param['lr_patience']
     lr_factor = param['lr_factor']
@@ -1013,12 +1028,12 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 
     criterion_hr_global = hr_loss()
     criterion_mse = MSELoss()
-    
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, drop_last=True,num_workers = 20)
     valid_loader = DataLoader(dataset=valid_data, batch_size=1, shuffle=False,num_workers = 10)
-    
+
     if optimizer_type == "SGD":
         optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
         scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
@@ -1034,7 +1049,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
         else:
             optimizer = optim.Adam(model.parameters(), lr=lr,weight_decay=weight_decay)
 
-        scheduler = MultiStepLR(optimizer, milestones=[100,200,300,400,500,600,700,800], gamma=1) 
+        scheduler = MultiStepLR(optimizer, milestones=[100,200,300,400,500,600,700,800], gamma=1)
     elif optimizer_type == "Adamw":
         print('use adamw')
         if transfer:
@@ -1046,21 +1061,21 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             optimizer,
             total_epochs=epochs,
             warmup_epochs=warm_up_epochs,
-            lr_min=1e-5  # 可设为 base_lr 的 1% 左右
+            lr_min=1e-5
             )
         else:
-            scheduler = MultiStepLR(optimizer, milestones=[100,200,300,400,500,600,700,800], gamma=0.5)    
+            scheduler = MultiStepLR(optimizer, milestones=[100,200,300,400,500,600,700,800], gamma=0.5)
     elif optimizer_type == "Adam_sam":
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5) #learning rate decay
 
-#         scheduler = MultiStepLR(optimizer, milestones=[50,100,150,200,250,300,350,400], gamma=0.5)         
+#         scheduler = MultiStepLR(optimizer, milestones=[50,100,150,200,250,300,350,400], gamma=0.5)
     if criterion is None:
         criterion = nn.MSELoss().to(device)
-    
+
 #     criterion_mse = nn.MSELoss().to(device)
 #     if criterion_fl is None:
-#         criterion_fl = nn.MSELoss().to(device)  
+#         criterion_fl = nn.MSELoss().to(device)
     if facies:
         criterion_facies = SegmentLoss(loss_type="L2").to(device)
     criterion_ce = nn.BCEWithLogitsLoss().to(device)
@@ -1071,7 +1086,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #     criterion_bce = CB_loss(beta, gamma).to(device)
     print('fault_loss use cbe')
 
-    # 主循环
+
     epoch_loss_train, epoch_loss_valid, epoch_lr = [], [], []
     epoch_loss_fl_train,epoch_loss_fl_valid,epoch_loss_hr_train,epoch_loss_hr_valid = [],[],[],[]
     epoch_loss_mse_train,epoch_loss_mse_valid = [],[]
@@ -1083,10 +1098,10 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
     for epoch in range(epochs):
         # since = time.time()
         since = time.time()
-        
-        # 重置每个epoch的计时
-        time_loss_ssim, time_loss_mse, time_loss_facies = 0, 0, 0   
-        # 训练阶段
+
+
+        time_loss_ssim, time_loss_mse, time_loss_facies = 0, 0, 0
+
         model.train()
         loss_train_per_epoch = 0
         loss_train_ssim_per_epoch = 0
@@ -1096,7 +1111,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
         loss_fl_train_per_epoch = 0
         loss_hr_train_per_epoch = 0
 #         loss_train_mse_per_epoch = 0
-        
+
         for batch_idx, batch_samples in enumerate(train_loader):
 
 
@@ -1116,15 +1131,15 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             data, target,target_flgt = Variable(target), Variable(data), Variable(target_flgt)
 
             # mask = batch_samples["mask"]
-            # mask = Variable(mask.to(device)) 
+            # mask = Variable(mask.to(device))
             # frame = batch_samples["frame"]
-            # frame = Variable(frame.to(device)) 
+            # frame = Variable(frame.to(device))
             # fl_p = batch_samples["fault_p"]
             # fl_p = Variable(fl_p.to(device))
             segments = batch_samples["segments"]
-            segments = Variable(segments.to(device)) 
+            segments = Variable(segments.to(device))
             # frame_mean = batch_samples["frame_mean"]
-            # frame_mean = Variable(frame_mean.to(device)) 
+            # frame_mean = Variable(frame_mean.to(device))
             optimizer.zero_grad()
             if ol_seis:
                 data = torch.cat((data,data,data), dim=1)
@@ -1135,7 +1150,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             # print(f'target*mask shape={(target*mask).shape}')
 #             data = torch.cat((data,data,data), dim=1)
             if mtl == False:
-                
+
 #                 target_i = model(data,mx,mx_len)
                 if pr_de:
                     target_i = model(data,target*mask,fl_p)
@@ -1155,29 +1170,29 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
                 # print(f'predj.max() ={target_j.max()}')
 #                 print(f'input size={target_j.shape}')
 #                 print(f'target size={target.shape}')
-                # l_ssim = 1 - ms_ssim3d(target_j, target, data_range=1.0)   
+                # l_ssim = 1 - ms_ssim3d(target_j, target, data_range=1.0)
                 # t0 = time.perf_counter()
                 # l_ssim = criterion(target_j, target)
                 # l_ssim = 0
                 # time_loss_ssim += time.perf_counter() - t0
-                
+
                 if ol_seis:
                     if use_mse:
                         t0 = time.perf_counter()
                         l_mse = criterion_mse(target_j, target)
                         loss_train_mse_per_epoch += l_mse.item()
                         time_loss_mse += time.perf_counter() - t0
-                        
+
                         if facies:
                             t0 = time.perf_counter()
                             l_facies = criterion_facies(target_j,segments)
                             loss_train_facies_per_epoch += l_facies.item()
-                            time_loss_facies += time.perf_counter() - t0                      
+                            time_loss_facies += time.perf_counter() - t0
                 else:
                     if use_mse:
                         l_mse = criterion_mse(target_j, target)
                         loss_train_mse_per_epoch += l_mse.item()
-                        
+
                         if facies:
                             l_facies = criterion_facies(target_j,segments)
                             loss_train_facies_per_epoch += l_facies.item()
@@ -1192,7 +1207,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
                 loss.backward()
                 optimizer.step()
                 if math.isnan(loss) == True:
-                    print('train:'+str(batch_idx)) 
+                    print('train:'+str(batch_idx))
                     print(f'error_loss={loss}')
 
                 loss_train_per_epoch += loss.item()
@@ -1214,10 +1229,10 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #                 criterion_bce = nn.BCEWithLogitsLoss(weight=weight_CE).to(device)
 
 
-    
-   
+
+
 #                 if epoch % 10 ==0:
-   
+
 #                 if epoch <400 :
 #                     l_hr_global = criterion_hr_global(frame_mean,target_hr)
 #                     target_hr =  target_hr * (1-mask) + target *(mask)
@@ -1225,12 +1240,12 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #                     loss_hr = l_ssim+l_hr_global
 # #                     loss_fl = criterion_fl((target_fl),target_flgt)
 # #                     loss = (10*loss_hr+loss_fl)/2
-# #                     loss_fl_train_per_epoch += loss_fl.item()  
+# #                     loss_fl_train_per_epoch += loss_fl.item()
 #                     loss = loss_hr
 #                 elif 600>epoch >400:
 #                     loss_fl = criterion_fl((target_flgt),target_fl)
 #                     loss = loss_fl
-#                     loss_fl_train_per_epoch += loss_fl.item() 
+#                     loss_fl_train_per_epoch += loss_fl.item()
                 if epoch>=0:
 #                 else:
                     l_hr_global = criterion_hr_global(frame_mean,target_hr)
@@ -1241,23 +1256,23 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #                     loss_fl = criterion_ce(target_fl,target_flgt)
                     loss = (10*loss_hr+loss_fl)/2
                     loss_fl_train_per_epoch += loss_fl.item()
-                    
+
                 loss.backward()
                 optimizer.step()
 #                 if math.isnan(loss_hr) == True or math.isnan(loss_fl) == True:
-#                     print('train:'+str(batch_idx)) 
-                    
+#                     print('train:'+str(batch_idx))
+
                 loss_train_per_epoch += loss.item()
 #                 loss_train_ssim_per_epoch += l_ssim.item()
 #                 loss_train_hr_global_per_epoch += l_hr_global.item()
 
-#                 loss_hr_train_per_epoch += loss_hr.item()     
+#                 loss_hr_train_per_epoch += loss_hr.item()
         # print(f"Epoch {epoch}:")
         # print(f"  SSIM loss time: {time_loss_ssim:.4f} s")
         # print(f"  MSE loss time: {time_loss_mse:.4f} s")
         # print(f"  Facies loss time: {time_loss_facies:.4f} s")
         # print(f"  Epoch total time: {time.time() - since:.2f} s")
-        # 验证阶段
+
         model.eval()
         loss_valid_per_epoch = 0
         loss_valid_ssim_per_epoch = 0
@@ -1269,8 +1284,8 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
         loss_valid_mse_per_epoch = 0
         loss_valid_facies_per_epoch = 0
         with torch.no_grad():
-            for batch_idx, batch_samples in enumerate(valid_loader):   
-                
+            for batch_idx, batch_samples in enumerate(valid_loader):
+
                 data = batch_samples["seis"]
 #                 data = batch_samples["seis_m"]
                 target_flgt = batch_samples["fault"]
@@ -1284,24 +1299,24 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
                 data, target,target_flgt = target.to(device), data.to(device),target_flgt.to(device)
                 data, target,target_flgt = Variable(target), Variable(data), Variable(target_flgt)
                 # frame = batch_samples["frame"]
-                # frame = Variable(frame.to(device)) 
+                # frame = Variable(frame.to(device))
                 # mask = batch_samples["mask"]
-                # mask = Variable(mask.to(device)) 
+                # mask = Variable(mask.to(device))
                 segments = batch_samples["segments"]
-                segments = Variable(segments.to(device)) 
+                segments = Variable(segments.to(device))
 #                 fl_p = batch_samples["fault_p"]
 #                 fl_p = Variable(fl_p.to(device))
 # #                 mx_len = batch_samples["mx_len"]
 # #                 mx_len = Variable(mx_len.to(device))
 # #                 mx = batch_samples["mx"]
-# #                 mx = Variable(mx.to(device)) 
+# #                 mx = Variable(mx.to(device))
 #                 frame_mean = batch_samples["frame_mean"]
-#                 frame_mean = Variable(frame_mean.to(device)) 
+#                 frame_mean = Variable(frame_mean.to(device))
                 if ol_seis:
                     data = torch.cat((data,data,data), dim=1)
                 else:
                     data = torch.cat((target*mask,data,data), dim=1)
-#                 data = torch.cat((data,data,data), dim=1)               
+#                 data = torch.cat((data,data,data), dim=1)
 
 
                 if mtl == False:
@@ -1312,7 +1327,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
                     else:
                         target_i = model(data)
 
-                    
+
 
 
 
@@ -1323,9 +1338,9 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
                         # l_hr_global_valid = criterion_hr_global(torch.squeeze(target*mask,dim=1),target_j)
                         l_hr_global_valid = 0
                     # print(f'l_hr_global_valid.max() ={l_hr_global_valid.max()}')
-#                     target_j =  target_j * (1-mask) + target *(mask)              
+#                     target_j =  target_j * (1-mask) + target *(mask)
 
-                    # l_ssim_valid = criterion(target_j, target) 
+                    # l_ssim_valid = criterion(target_j, target)
                     if ol_seis:
                         # loss_valid = l_ssim_valid
                         if use_mse:
@@ -1354,15 +1369,15 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
                     # loss_valid_ssim_per_epoch += l_ssim_valid.item()
                     # if not ol_seis:
                         # loss_valid_hr_global_per_epoch += l_hr_global_valid.item()
-              
+
                 elif mtl:
 
-                    
-                    
+
+
                     target_hr,target_fl= model(data,800)
 
 #                     l_hr_global_valid = criterion_hr_global(frame_mean,target_hr)
-#                     target_hr =  target_hr * (1-mask) + target *(mask)   
+#                     target_hr =  target_hr * (1-mask) + target *(mask)
 #                     l_ssim_valid = criterion(target_hr, target)
 #                     loss_hr_valid = l_ssim_valid+l_hr_global_valid
 #                     if epoch % 10 ==0:
@@ -1371,8 +1386,8 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #                         loss_fl_valid_per_epoch += loss_fl_valid.item()
 #                     else:
 #                         loss_valid = loss_hr_valid
-                        
-                        
+
+
 #                     if epoch <400 :
 #                         l_hr_global_valid = criterion_hr_global(frame_mean,target_hr)
 #                         target_hr =  target_hr * (1-mask) + target *(mask)
@@ -1380,7 +1395,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #                         loss_hr_valid = l_ssim_valid+l_hr_global_valid
 #     #                     loss_fl = criterion_fl((target_fl),target_flgt)
 #     #                     loss = (10*loss_hr+loss_fl)/2
-#     #                     loss_fl_train_per_epoch += loss_fl.item()  
+#     #                     loss_fl_train_per_epoch += loss_fl.item()
 #                         loss_valid = loss_hr_valid
 #                     elif 600>epoch >400:
 #                         loss_fl_valid = criterion_fl((target_flgt),target_fl)
@@ -1396,13 +1411,13 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
 #                         loss_fl_valid = criterion_ce(target_fl,target_flgt)
                         loss_valid = (10*loss_hr_valid+loss_fl_valid)/2
                         loss_fl_valid_per_epoch += loss_fl_valid.item()
-                        
 
-                    loss_valid_per_epoch += loss_valid.item()                                     
-                    loss_hr_valid_per_epoch += loss_hr_valid.item()  
+
+                    loss_valid_per_epoch += loss_valid.item()
+                    loss_hr_valid_per_epoch += loss_hr_valid.item()
                     # loss_valid_ssim_per_epoch += l_ssim_valid.item()
                     # loss_valid_hr_global_per_epoch += l_hr_global_valid.item()
-                    
+
         loss_train_per_epoch = loss_train_per_epoch / len(train_loader)
         loss_train_ssim_per_epoch = loss_train_ssim_per_epoch / len(train_loader)
         loss_train_mse_per_epoch = loss_train_mse_per_epoch / len(train_loader)
@@ -1413,7 +1428,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
         loss_valid_mse_per_epoch = loss_mse_valid_per_epoch / len(valid_loader)
         loss_valid_facies_per_epoch = loss_facies_valid_per_epoch / len(valid_loader)
         loss_valid_hr_global_per_epoch = loss_valid_hr_global_per_epoch / len(valid_loader)
-        
+
         if mtl:
             loss_fl_train_per_epoch = loss_fl_train_per_epoch / len(train_loader)
             loss_fl_valid_per_epoch = loss_fl_valid_per_epoch / len(valid_loader)
@@ -1428,7 +1443,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             epoch_loss_hr_valid.append(loss_hr_valid_per_epoch)
         epoch_lr.append(optimizer.param_groups[0]['lr'])
 
-        # 保存模型
+
         if epoch % save_inter == 0:
             state = {'epoch': epoch, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
             filename = os.path.join(checkpoint_path, 'checkpoint-epoch{}.pth'.format(epoch))
@@ -1436,7 +1451,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             # torch.save(lora.lora_state_dict(model), filename)
             # print(filename)
 
-        # 保存最优模型
+
         if loss_valid_per_epoch < best_mse: # loss_per_epoch valid_mse_per_epoch
             state = {'epoch': epoch, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
             filename = os.path.join(checkpoint_path, 'checkpoint-best.pth')
@@ -1449,15 +1464,15 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
         time_elapsed = time.time() - since
 #         print('Training complete in {:.0f}m {:.0f}s'.format(
 #             time_elapsed // 60, time_elapsed % 60))
-        # 显示loss
-        if epoch % disp_inter == 0: 
+
+        if epoch % disp_inter == 0:
             if mtl:
                 print('Epoch:{}, Training Loss:fl={:.8f} hr_all:{:.8f} si:{:.8f} hr:{:.8f} Validation Loss:fl={:.8f} si:{:.8f} hr:{:.8f} Learning rate: {:.8f} time:{:.0f}m {:.0f}s'.format(epoch, loss_fl_train_per_epoch,loss_hr_train_per_epoch,loss_train_ssim_per_epoch,loss_train_hr_global_per_epoch,loss_fl_valid_per_epoch,loss_valid_ssim_per_epoch,loss_valid_hr_global_per_epoch, epoch_lr[epoch],time_elapsed // 60, time_elapsed % 60))
             if not mtl:
-                print('Epoch:{}, Training Loss:{:.8f} si:{:.8f} mse:{:.8f} facies:{:.8f} hr:{:.8f} Validation Loss:{:.8f} si:{:.8f} mse:{:.8f} facies:{:.8f} hr:{:.8f}  Learning rate: {:.8f} time:{:.0f}m {:.0f}s'.format(epoch, loss_train_per_epoch,loss_train_ssim_per_epoch,loss_train_mse_per_epoch,loss_train_facies_per_epoch,loss_train_hr_global_per_epoch, loss_valid_per_epoch,loss_valid_ssim_per_epoch,loss_valid_mse_per_epoch,loss_valid_facies_per_epoch,loss_valid_hr_global_per_epoch, epoch_lr[epoch],time_elapsed // 60, time_elapsed % 60))      
+                print('Epoch:{}, Training Loss:{:.8f} si:{:.8f} mse:{:.8f} facies:{:.8f} hr:{:.8f} Validation Loss:{:.8f} si:{:.8f} mse:{:.8f} facies:{:.8f} hr:{:.8f}  Learning rate: {:.8f} time:{:.0f}m {:.0f}s'.format(epoch, loss_train_per_epoch,loss_train_ssim_per_epoch,loss_train_mse_per_epoch,loss_train_facies_per_epoch,loss_train_hr_global_per_epoch, loss_valid_per_epoch,loss_valid_ssim_per_epoch,loss_valid_mse_per_epoch,loss_valid_facies_per_epoch,loss_valid_hr_global_per_epoch, epoch_lr[epoch],time_elapsed // 60, time_elapsed % 60))
 #                 print('Epoch:{}, Training Loss:{:.8f} Validation Loss:{:.8f} Learning rate: {:.8f} time:{:.0f}m {:.0f}s'.format(epoch, loss_train_per_epoch, loss_valid_per_epoch, epoch_lr[epoch],time_elapsed // 60, time_elapsed % 60))
 
-    # 训练loss曲线
+
     if plot:
         if mtl == False:
             x = [i for i in range(epochs)]
@@ -1500,7 +1515,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             ax.set_title(f'Training fault curve', fontsize=15)
             ax.grid(True)
             plt.legend(loc='upper right', fontsize=15)
-            
+
             ax = fig.add_subplot(2, 2, 3)
             ax.plot(x, smooth(epoch_loss_hr_train, 0.6), label='Training loss')
             ax.plot(x, smooth(epoch_loss_hr_valid, 0.6), label='Validation loss')
@@ -1509,7 +1524,7 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             ax.set_title(f'Training horizons curve', fontsize=15)
             ax.grid(True)
             plt.legend(loc='upper right', fontsize=15)
-            
+
 
             ax = fig.add_subplot(2, 2, 4)
             ax.plot(x, epoch_lr,  label='Learning Rate')
@@ -1518,8 +1533,8 @@ def train_valid_net(param, model, train_data, valid_data, criterion=None,criteri
             ax.set_title(f'Learning rate curve', fontsize=15)
             ax.grid(True)
             plt.legend(loc='upper right', fontsize=15)
-            plt.show()            
-    if mtl == True:      
+            plt.show()
+    if mtl == True:
         logs = {"epoch_loss_train":epoch_loss_train,
                 "epoch_loss_valid":epoch_loss_valid,
                 "epoch_loss_fl_train":epoch_loss_fl_train,
@@ -1552,20 +1567,18 @@ def seismic_phase_alignment_loss(pred_rgt, seismic, eps=1e-6, amp_percentile=70.
     derivative of seismic amplitude along this tangent should be small.
 
     penalty:
-        'l1'          - |d|，原始行为。断层处大残差会被线性惩罚，倾向抹平断距
-        'charbonnier' - sqrt(d^2+c^2)-c，平滑 L1
-        'welsch'      - 1-exp(-(d/c)^2)，饱和型。残差 >> c 时梯度趋于 0，
-                        断层/失配处自动放弃对齐，不再抹平断距
-    penalty_scale: c。基于 zxdata ep100 预测实测标定：贴合同相轴的残差
-        p50≈0.13 / p90≈0.35，断层尾部 >0.5，故默认 c=0.3（≈p90）
+        'l1'          - absolute directional derivative
+        'charbonnier' - smooth L1-like penalty, sqrt(d^2+c^2)-c
+        'welsch'      - saturating penalty, 1-exp(-(d/c)^2)
+    penalty_scale: robust scale c
     """
     global _PHASE_LOSS_SHAPE_WARNED
     if (pred_rgt.dim() != 4 or seismic.dim() != 4
             or pred_rgt.shape[-2:] != seismic.shape[-2:]):
         if not _PHASE_LOSS_SHAPE_WARNED:
-            print(f"[WARN] seismic_phase_alignment_loss: 形状不匹配 "
-                  f"pred={tuple(pred_rgt.shape)} seis={tuple(seismic.shape)}，"
-                  f"loss 恒为 0（仅提示一次）")
+            print(f"[WARN] seismic_phase_alignment_loss shape mismatch: "
+                  f"pred={tuple(pred_rgt.shape)}, seismic={tuple(seismic.shape)}; "
+                  f"returning zero loss (reported once)")
             _PHASE_LOSS_SHAPE_WARNED = True
         return pred_rgt.sum() * 0.0
 
@@ -1604,9 +1617,10 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
              CIGLoss_type='L2', ciglabel_dir=None, use_ep=False,
              frame_part=False, file_name=None):
 
-    # ---------------- 初始化参数 ----------------
+
     epochs = param['epochs']
     batch_size = param['batch_size']
+    num_workers = int(param.get('num_workers', 4))
     lr = param['lr']
     optimizer_type = param['optimizer_type']
     weight_decay = param['weight_decay']
@@ -1625,14 +1639,14 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
     facies_3D = param["facies_3D"]
     seg_first = param["seg_first"]
 
-    # 这些是历史遗留键，改 .get() 后即可从 config 安全删除（不删也无害）
+
     lr_patience = param.get('lr_patience', 8)
     lr_factor   = param.get('lr_factor', 0.5)
     gamma       = param.get('gamma', 0.9)
     step_size   = param.get('step_size', 50)
     momentum    = param.get('momentum', 0.8)
 
-    # ---------------- 新增配置 ----------------
+
     boundary_weight = param.get('boundary_weight', 0.0)
     boundary_margin = param.get('boundary_margin', 0.5)
     max_depth_val   = param.get('max_depth', 10.0)
@@ -1640,7 +1654,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
     phase_amp_percentile = param.get('phase_amp_percentile', 70.0)
     phase_penalty = param.get('phase_penalty', 'l1')            # 'l1' | 'charbonnier' | 'welsch'
     phase_penalty_scale = param.get('phase_penalty_scale', 0.3)
-    phase_warmup_epochs = param.get('phase_warmup_epochs', 0)   # 前 N epoch 线性 ramp-up，0=不启用
+    phase_warmup_epochs = param.get('phase_warmup_epochs', 0)
     segment_teacher_weight = param.get('segment_teacher_weight', 0.0)
     segment_teacher_warmup_epochs = param.get('segment_teacher_warmup_epochs', 0)
     seg_order_weight = param.get('seg_order_weight', 0.0)
@@ -1654,53 +1668,53 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
     consistency_path = param.get('consistency_path', None)
     consistency_target = None
     consistency_np = None
-    # 跨切片成对一致性：batch 由相邻切片成对组成，约束成对预测的差值
-    # （与 consistency_weight 的"锚定参考体"机制互斥使用；共用 consistency 打印字段）
+
+
     pair_consistency_weight = param.get('pair_consistency_weight', 0.0)
     pair_beta = param.get('pair_beta', 0.02)
     pair_gap = int(param.get('pair_gap', 1))
     pair_depth_gamma = param.get('pair_depth_gamma', 0.0)
-    # dip 补偿版 pair：δ 场来自 PWD（make_pair_dip_512.py），比较 pa(z) 与 pb(z+δ)
-    # ——同位置版是 δ≡0 特例。仅适用于"样本索引=主方向切片号"的数据集（如纯 xline）。
+
+
     pair_dip_path = param.get('pair_dip_path', '')
     pair_dip_scale = float(param.get('pair_dip_scale', 0.0)) or float(pair_gap)
     pair_dip_np = None
     if pair_consistency_weight > 0 and pair_dip_path:
         pair_dip_np = torch.from_numpy(np.load(pair_dip_path).astype(np.float32))  # (y, z, x)
-        print(f">>> pair dip 补偿启用: {pair_dip_path} shape={tuple(pair_dip_np.shape)} "
+        print(f">>> Dip-compensated adjacent-section loss enabled: {pair_dip_path}, shape={tuple(pair_dip_np.shape)}, "
               f"scale={pair_dip_scale}")
-    # 跨断层配对锚点：约束 RGT(zl,xl)==RGT(zr,xr)（zr=zl+互相关断距，可为小数）
+
     fault_pair_weight = param.get('fault_pair_weight', 0.0)
     fault_pair_beta = param.get('fault_pair_beta', 0.03)
     if fault_pair_weight > 0:
-        print(f">>> 启用跨断层配对 loss: weight={fault_pair_weight}, beta={fault_pair_beta}"
-              f" (锚点来自样本 fault_pairs 键, conf 加权)")
+        print(f">>> Fault-pair loss enabled: weight={fault_pair_weight}, beta={fault_pair_beta}"
+              f" (confidence-weighted pairs from the fault_pairs sample key)")
     if consistency_weight > 0:
         if not consistency_path:
             raise ValueError('consistency_weight > 0 requires consistency_path')
         _n1, _n2, _n3 = param['data_shape']
         consistency_np = np.fromfile(consistency_path, dtype=np.single).reshape(_n3, _n2, _n1).transpose(2, 1, 0)
     if boundary_weight > 0:
-        print(f">>> 启用边界锚定 loss: weight={boundary_weight}, "
+        print(f">>> Boundary-anchor loss enabled: weight={boundary_weight}, "
               f"margin={boundary_margin}, max_depth={max_depth_val}")
     if phase_weight > 0:
-        print(f">>> 启用 seismic phase alignment loss: weight={phase_weight}, "
+        print(f">>> Seismic phase-alignment loss enabled: weight={phase_weight}, "
               f"amp_percentile={phase_amp_percentile}, penalty={phase_penalty}, "
               f"scale={phase_penalty_scale}, warmup={phase_warmup_epochs}ep")
     if segment_teacher_weight > 0:
-        print(f">>> 启用 segment relative teacher loss: weight={segment_teacher_weight}, "
+        print(f">>> Segment relative-teacher loss enabled: weight={segment_teacher_weight}, "
               f"warmup={segment_teacher_warmup_epochs}ep")
     if seg_order_weight > 0:
-        print(f">>> 启用 segment relative order loss: weight={seg_order_weight}, "
+        print(f">>> Segment relative-order loss enabled: weight={seg_order_weight}, "
               f"warmup={seg_order_warmup_epochs}ep, min_points={seg_order_min_points}, "
               f"min_depth_gap={seg_order_min_depth_gap}, margin={seg_order_margin}, "
               f"max_segments={seg_order_max_segments}")
     if frame_anchor_weight > 0:
-        print(f">>> 启用 interpreted horizon absolute frame anchor loss: weight={frame_anchor_weight}")
+        print(f">>> Absolute interpreted-horizon anchor loss enabled: weight={frame_anchor_weight}")
     if consistency_weight > 0:
-        print(f">>> 启用 pretrained consistency loss: weight={consistency_weight}, path={consistency_path}")
+        print(f">>> Pretrained-consistency loss enabled: weight={consistency_weight}, path={consistency_path}")
 
-    # ---------------- RGT 层位质控（只评价，不参与 loss）----------------
+
     qc = None
     qc_history = []
     best_qc_deep = 1e30
@@ -1712,12 +1726,12 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                                slice_step=param.get('qc_slice_step', 32),
                                levels_n=param.get('qc_levels', 40),
                                pred_local=param.get('pred_local', 'xline'))
-        print(f">>> 启用 RGT 层位质控: ref={qc_gh_path}, 切片数={len(qc.slices)}, "
-              f"随 plot_epoch 周期评估，深部指标新低时存 checkpoint-best-qc.pth")
+        print(f">>> RGT horizon QC enabled: ref={qc_gh_path}, sections={len(qc.slices)}; "
+              f"evaluated at plot_epoch intervals")
 
-    # 分组 LR / 调度相关
-    lr_conv        = param.get('lr_conv', None)        # 预训练 conv 组绝对 LR；None 则用 lr
-    lr_lora        = param.get('lr_lora', None)        # LoRA 组绝对 LR；None 则用 lr*mult
+
+    lr_conv        = param.get('lr_conv', None)
+    lr_lora        = param.get('lr_lora', None)
     lr_lora_mult   = param.get('lr_lora_mult', 2.0)
     warmup_epochs  = param.get('warmup_epochs', 0)
     scheduler_type = param.get('scheduler_type', 'cosine')
@@ -1728,15 +1742,14 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
     if consistency_weight > 0:
         consistency_target = torch.from_numpy(consistency_np * 10.0).float().to(device)
 
-    # struct loss 按 batch_idx 切片 u1/u2/u3，依赖加载顺序，此时禁止 shuffle
+
     shuffle_train = param.get('shuffle', False)
     if shuffle_train and ('str' in loss_type or 'struct' in loss_type):
-        print("[WARN] loss_type 含 str/struct，按 batch_idx 对齐 u1/u2/u3，强制 shuffle=False")
+        print("[WARN] structure loss aligns arrays by batch index; forcing shuffle=False")
         shuffle_train = False
     if pair_consistency_weight > 0:
         class _PairBatchSampler(torch.utils.data.Sampler):
-            """batch = [i1, i1+gap, i2, i2+gap, ...]；每 epoch 采 n//2 对，
-            样本吞吐与普通 shuffle loader 相同"""
+            """Yield batches as adjacent pairs with standard sample throughput."""
             def __init__(self, n, batch_size, gap):
                 self.n = n
                 self.gap = gap
@@ -1755,22 +1768,19 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                 return int(np.ceil((self.n // 2) / self.ppb))
         train_loader = DataLoader(dataset=train_data,
                                   batch_sampler=_PairBatchSampler(len(train_data), batch_size, pair_gap),
-                                  num_workers=20)
-        print(f">>> 启用跨切片成对一致性: weight={pair_consistency_weight}, "
-              f"beta={pair_beta}, gap={pair_gap} (batch 内偶数位=奇数位的邻切片)")
+                                  num_workers=num_workers)
+        print(f">>> Adjacent-section consistency enabled: weight={pair_consistency_weight}, "
+              f"beta={pair_beta}, gap={pair_gap} (consecutive batch entries form pairs)")
     else:
         train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=shuffle_train,
-                                  drop_last=False, num_workers=20)
+                                  drop_last=False, num_workers=num_workers)
     print(len(train_loader))
 
     # ============================================================
-    # 优化器 + 调度器：分组 LR（LoRA / 预训练 conv 各自基准）+ warmup + cosine
+
     # ============================================================
     def _build_param_groups(model, base_lr, lora_mult, wd, lr_conv=None, lr_lora=None):
-        """可训练参数分两组：
-           - LoRA 旁路：高 LR（绝对值优先 lr_lora，否则 base*mult），不加 weight_decay
-           - 解冻的预训练 conv（SR/DWConv）：基准 LR（绝对值优先 lr_conv，否则 base_lr）
-        """
+        """Create optimizer groups for LoRA and unfrozen convolution weights."""
         lora_params, conv_params = [], []
         for n, p in model.named_parameters():
             if not p.requires_grad:
@@ -1796,7 +1806,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
         if transfer:
             groups = _build_param_groups(model, lr, lr_lora_mult, weight_decay,
                                          lr_conv=lr_conv, lr_lora=lr_lora)
-            optimizer = optim.AdamW(groups)  # 各组 lr/wd 已在 groups 内指定
+            optimizer = optim.AdamW(groups)
             for i, g in enumerate(optimizer.param_groups):
                 print(f"    group{i}: lr={g['lr']:.2e}, wd={g['weight_decay']}, "
                       f"#params={sum(p.numel() for p in g['params']):,}")
@@ -1806,11 +1816,11 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
                                lr=lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
 
-    # ---- 调度器：LambdaLR 返回统一乘子，按比例缩放所有组，保持 LoRA:conv 比例恒定 ----
+
     if scheduler_type == 'cosine':
         def lr_lambda(epoch):
             if warmup_epochs > 0 and epoch < warmup_epochs:
-                return (epoch + 1) / warmup_epochs                  # 线性 warmup：0→1
+                return (epoch + 1) / warmup_epochs
             progress = (epoch - warmup_epochs) / max(1, epochs - warmup_epochs)
             progress = min(max(progress, 0.0), 1.0)
             cos = 0.5 * (1.0 + math.cos(math.pi * progress))        # 1→0
@@ -1822,14 +1832,14 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
         scheduler = MultiStepLR(optimizer, milestones=ms, gamma=0.5)
         print(f">>> MultiStep: milestones={ms}, gamma=0.5")
     elif scheduler_type == 'none':
-        scheduler = LambdaLR(optimizer, lambda e: 1.0)              # 恒定，不衰减
-        print(">>> LR 不衰减（保持各组初始比例）")
+        scheduler = LambdaLR(optimizer, lambda e: 1.0)
+        print(">>> Learning rates remain constant")
     else:
         scheduler = LambdaLR(optimizer, lambda e: eta_ratio + (1 - eta_ratio) *
                              0.5 * (1 + math.cos(math.pi * min(e / max(1, epochs), 1.0))))
-        print(f">>> 未知 scheduler_type='{scheduler_type}'，退回 cosine")
+        print(f">>> Unknown scheduler_type='{scheduler_type}'; using cosine")
 
-    # ---------------- 损失函数 ----------------
+
     if criterion is None:
         criterion = nn.MSELoss().to(device)
     if facies_3D:
@@ -1838,8 +1848,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
         criterion_facies = SegmentLoss(depth_weight_gamma=seg_depth_gamma,
                                        cross_slice=seg_cross_slice).to(device)
         if seg_cross_slice:
-            print(">>> SegmentLoss 跨切片分组: batch 内同全局 ID 共用中心 "
-                  "(要求 shuffle=False, batch 为相邻切片)")
+            print(">>> SegmentLoss groups identical global IDs across adjacent sections")
         criterion_segment_order = SegmentOrderLoss(
             min_points=seg_order_min_points,
             min_depth_gap=seg_order_min_depth_gap,
@@ -1847,8 +1856,8 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
             max_segments=seg_order_max_segments,
         ).to(device)
         if seg_depth_gamma > 0:
-            print(f">>> SegmentLoss 深度加权: gamma={seg_depth_gamma} "
-                  f"(最深轴权重为最浅轴的 {1.0 + seg_depth_gamma:.1f} 倍)")
+            print(f">>> SegmentLoss depth weighting: gamma={seg_depth_gamma}; "
+                  f"deepest-to-shallowest ratio={1.0 + seg_depth_gamma:.1f}")
     criterion_ce = nn.BCEWithLogitsLoss().to(device)
     criterion_bce = ceb_loss().to(device)
     print('fault_loss use cbe')
@@ -1861,7 +1870,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
             print("CIGLoss is None")
     criterion2_2 = NormalLoss().to(device)
 
-    # ---------------- 主循环准备 ----------------
+
     epoch_loss_train, epoch_loss_valid, epoch_lr = [], [], []
     epoch_loss_fl_train, epoch_loss_fl_valid, epoch_loss_hr_train, epoch_loss_hr_valid, epoch_loss_mx_valid = [], [], [], [], []
     epoch_hz_px = []
@@ -1886,7 +1895,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
     for epoch in range(epochs):
         since = time.time()
 
-        # ---------------- 训练阶段 ----------------
+
         model.train()
         loss_train_per_epoch = 0
         loss_hr_per_epoch = 0
@@ -2035,14 +2044,14 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         loss += a3 * loss2_1
                         loss_facies_per_epoch += a3 * loss2_1.item()
 
-                # === 软边界锚定 loss ===
-                # 仅在启用了 boundary_weight 且过了 trans_epoch 时生效
+
+
                 if boundary_weight > 0 and (not trans_epoch or epoch >= trans_epoch):
-                    # target_j 形状: [B, 1, H, W]，dim=2 是深度方向
-                    # 单侧锚定：top<=margin, bot>=max_depth-margin。
-                    # 注意：不要对 bot 加过冲上界！模型初始在最深层位以下的外推区
-                    # 会过冲到 ~2.6*max_depth，双侧约束会在早期贡献 ~97% 的 loss
-                    # 把 hr 主项压垮（实测 epoch0-5 训练直接崩）。
+
+
+
+
+
                     top_row = target_j[:, :, 0, :]
                     bot_row = target_j[:, :, -1, :]
                     l_top = F.relu(top_row - boundary_margin).pow(2).mean()
@@ -2069,7 +2078,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                     loss_consistency_per_epoch += l_consistency.item()
 
                 if pair_consistency_weight > 0:
-                    # batch 由 _PairBatchSampler 保证 [i, i+gap] 成对相邻
+
                     pa = target_j[0::2]
                     pb = target_j[1::2]
                     mnp = min(pa.shape[0], pb.shape[0])
@@ -2077,7 +2086,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         pb_eff = pb[:mnp]
                         vmask = None
                         if pair_dip_np is not None:
-                            # 沿构造方向一致: pb 按 δ 竖直亚像素 warp 后与 pa 同位置比
+
                             ia = batch_samples['index'].long()[0::2][:mnp]
                             ia = ia.clamp(0, pair_dip_np.shape[0] - 1)
                             d = (pair_dip_np[ia] * pair_dip_scale).to(target_j.device)
@@ -2094,7 +2103,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         pl = F.smooth_l1_loss(pa[:mnp], pb_eff, beta=pair_beta, reduction='none')
                         Hd = pl.shape[2]
                         zc = torch.arange(Hd, device=pl.device, dtype=pl.dtype)
-                        # 深度加权（gamma=0 退化为均匀）；与 dip 有效域掩膜相乘归一
+
                         w = (1.0 + pair_depth_gamma * zc / max(Hd - 1, 1)).view(1, 1, Hd, 1)
                         w = w.expand_as(pl)
                         if vmask is not None:
@@ -2130,7 +2139,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         loss_frame_anchor_per_epoch += l_fp.item()
 
                 if phase_weight > 0:
-                    # 训练初期预测尚乱，切向方向不可靠 → 线性 ramp-up
+
                     if phase_warmup_epochs > 0:
                         w_phase = phase_weight * min(1.0, (epoch + 1) / phase_warmup_epochs)
                     else:
@@ -2171,25 +2180,25 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                     l_mx_valid = criterion_hr_global(mx_valid, target_j)
                     loss_mx_valid_per_epoch += l_mx_valid.item()
 
-                # NaN 检查必须在 step 之前，否则坏梯度已经写进权重
+
                 if not torch.isfinite(loss):
-                    print(f'[WARN] epoch {epoch} batch {batch_idx}: loss={loss.item()}, 跳过本次更新')
+                    print(f'[WARN] epoch {epoch} batch {batch_idx}: nonfinite loss={loss.item()}; update skipped')
                     optimizer.zero_grad()
                 else:
                     loss.backward()
                     optimizer.step()
                     loss_train_per_epoch += loss.item()
 
-        # ---------------- 周期性可视化/保存 ----------------
+
         if plot_epoch:
             if epoch % plot_epoch == 0 or epoch == epochs - 1:
                 pred_samples = pred_dict_2d23d(model, train_data)
 
-                # --- RGT 层位质控（复用本次全量推理，零额外成本）---
+
                 if qc is not None:
                     qc_m = qc.evaluate(pred_samples)
                     qc_history.append({'epoch': epoch, **qc_m})
-                    print(">>> QC[ep{}] 层位偏差(px): all={:.2f} deep={:.2f} bands={}".format(
+                    print(">>> QC[ep{}] horizon error (samples): all={:.2f} deep={:.2f} bands={}".format(
                         epoch, qc_m['all'], qc_m['deep'],
                         '/'.join('{:.1f}'.format(v) for v in qc_m['bands'])))
                     if qc_m['deep'] < best_qc_deep:
@@ -2197,7 +2206,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         state = {'epoch': epoch, 'state_dict': model.state_dict(),
                                  'optimizer': optimizer.state_dict()}
                         torch.save(state, os.path.join(checkpoint_path, 'checkpoint-best-qc.pth'))
-                        print(f">>> QC 深部指标新低 ({best_qc_deep:.2f}px)，已存 checkpoint-best-qc.pth")
+                        print(f">>> New best deep-horizon QC ({best_qc_deep:.2f} samples); checkpoint saved")
 
                 _np = len(pred_samples)
                 sn = [min(50, _np - 1), min(100, _np - 1), _np - 1]
@@ -2215,8 +2224,8 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         os.makedirs(savep_path)
                     saved_file = f'{savep_path}_{epoch}.dat'
                     rgt_pred_in = np.zeros((n1, n2, n3), dtype=np.single)
-                    # 混合方向数据集样本数可超过体切片数：前 n2/n3 个样本按约定
-                    # 是主方向切片的顺序排列，多出的样本只参与训练不参与回填
+
+
                     if pred_local == 'inline':
                         for i in range(min(len(pred_samples), n3)):
                             rgt_pred_in[:, :, i] = pred_samples[i]['pred'][0]
@@ -2237,7 +2246,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                     draw_samples(select_samples_2[:], attr_list=['frame', 'hrzs2', 'pred', 'cpred'],
                                  save=True, save_file=save_file, fl_max=0.15)
 
-        # ---------------- 每 epoch 汇总 ----------------
+
         loss_train_per_epoch = loss_train_per_epoch / len(train_loader)
         loss_train_ssim_per_epoch = loss_train_ssim_per_epoch / len(train_loader)
         loss_train_hr_global_per_epoch = loss_hr_per_epoch / len(train_loader)
@@ -2255,9 +2264,9 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
 
         epoch_loss_train.append(loss_train_per_epoch)
         epoch_hz_px.append(hz_px_per_epoch / len(train_loader))
-        epoch_lr.append(optimizer.param_groups[0]['lr'])  # 记录 group0(conv) 的 LR
+        epoch_lr.append(optimizer.param_groups[0]['lr'])
 
-        # 保存模型
+
         if epoch % save_inter == 0 or epoch == epochs - 1:
             state = {'epoch': epoch, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
             filename = os.path.join(checkpoint_path, 'checkpoint-epoch{}.pth'.format(epoch))
@@ -2266,7 +2275,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
             else:
                 torch.save(state, filename)
 
-        # 保存最优模型
+
         if loss_train_per_epoch < best_mse:
             state = {'epoch': epoch, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
             filename = os.path.join(checkpoint_path, 'checkpoint-best.pth')
@@ -2279,7 +2288,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
         scheduler.step()
         time_elapsed = time.time() - since
 
-        # 显示 loss
+
         if epoch % disp_inter == 0:
             if not mtl:
                 if facies:
@@ -2292,7 +2301,7 @@ def finetune(param, model, train_data, criterion=None, criterion_fl=None,
                         epoch, loss_train_per_epoch, loss_train_hr_global_per_epoch, loss_normal_per_epoch,
                         epoch_lr[epoch], time_elapsed // 60, time_elapsed % 60))
 
-    # ---------------- 训练曲线 ----------------
+
     if plot:
         x = [i for i in range(epochs)]
         fig = plt.figure(figsize=(12, 4))
@@ -2371,40 +2380,40 @@ def plot_facie(filename,slice_num,nx,nt):
 
 
 
-# 模型推理
+
 def pred_dict_2d23d(model, samples, input_attrs=["data"], output_attrs=["label"],values=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
 
     pred_samples = []
 
-    with torch.no_grad(): 
-        for i, sample_pred in enumerate(samples):     
+    with torch.no_grad():
+        for i, sample_pred in enumerate(samples):
 
             data = mea_std_norm(sample_pred["seis"])
             data = torch.from_numpy(data).unsqueeze(0).float()
             frame = (sample_pred["frame"])
-            frame = torch.from_numpy(frame).unsqueeze(0).float()        
-    
-                        
-            
+            frame = torch.from_numpy(frame).unsqueeze(0).float()
+
+
+
             data, frame = data.to(device), frame.to(device)
             data, frame = Variable(data), Variable(frame)
 #             data = torch.cat((data, data,data), dim=1)
             data = torch.cat((frame*10, data,data), dim=1)
 
-            target_hr= model(data) 
+            target_hr= model(data)
 
 
-            target_hr = target_hr.cpu().squeeze(0).numpy()   
-            
+            target_hr = target_hr.cpu().squeeze(0).numpy()
+
             sample_pred["pred"] = target_hr/10
             sample_pred["frame"] =  sample_pred['frame']
             # sample_pred["fr_mean"] =  sample_pred['fr_mean']
 
 
             pred_samples.append(sample_pred)
-            
+
     return pred_samples
 
 def pred_dict(model, samples, input_attrs=["data"], output_attrs=["label"]):
@@ -2412,45 +2421,45 @@ def pred_dict(model, samples, input_attrs=["data"], output_attrs=["label"]):
     model.eval()
 
     pred_samples = []
-    
-    with torch.no_grad(): 
-        for i, sample_pred in enumerate(samples):     
-         
+
+    with torch.no_grad():
+        for i, sample_pred in enumerate(samples):
+
 #             for i, input_attr in enumerate(input_attrs):
 #                 tmp = sample_pred[input_attr]
 #                 tmp = torch.from_numpy(tmp).unsqueeze(0).float()
 #                 if i  == 0:
-#                     data = tmp     
-#                 else:       
+#                     data = tmp
+#                 else:
 #                     data = torch.cat((data, tmp), dim=1
 
-            data = sample_pred["fault"] 
+            data = sample_pred["fault"]
             data = torch.from_numpy(data).unsqueeze(0).float()
-        
+
             for i, output_attr in enumerate(output_attrs):
                 tmp = sample_pred[output_attr]
                 tmp = torch.from_numpy(tmp).unsqueeze(0).float()
                 if i  == 0:
                     target = tmp
                 else:
-                    target = torch.cat((target, tmp), dim=1)       
-                        
+                    target = torch.cat((target, tmp), dim=1)
+
             sample_pred['mask'] = sample_pred['frame'].astype(np.bool_).astype(np.single)
             mask = torch.from_numpy(sample_pred['mask']).unsqueeze(0).float()
-            
+
             data, target, mask = data.to(device), target.to(device), mask.to(device)
             data, target, mask = Variable(data), Variable(target), Variable(mask)
-            
+
             data = torch.cat((target * mask, data), dim=1)
-            target_i = model(data)    
-        
+            target_i = model(data)
+
             target_j =  target_i * (1 - mask) + target * mask
 #             target_j = target_i
-            
+
             target_j = target_j.cpu().squeeze(0).numpy()
-            
+
             sample_pred["pred"] = target_j
-                
+
             pred_samples.append(sample_pred)
     return pred_samples
 
@@ -2501,34 +2510,34 @@ def pred_test(model, samples, input_attrs=["data"], output_attrs=["label"]):
     model.eval()
 
     pred_samples = []
-    
-    with torch.no_grad(): 
-        for i, sample_pred in enumerate(samples):     
 
-            data = sample_pred["fault"] 
+    with torch.no_grad():
+        for i, sample_pred in enumerate(samples):
+
+            data = sample_pred["fault"]
             data = torch.from_numpy(data).unsqueeze(0).float()
-        
+
             for i, output_attr in enumerate(output_attrs):
                 tmp = sample_pred[output_attr]
                 tmp = torch.from_numpy(tmp).unsqueeze(0).float()
                 if i  == 0:
                     target = tmp
                 else:
-                    target = torch.cat((target, tmp), dim=1)       
-                        
+                    target = torch.cat((target, tmp), dim=1)
+
             frame = torch.from_numpy(sample_pred['frame']).unsqueeze(0).float()
-            
+
             data, target, frame = data.to(device), target.to(device), frame.to(device)
             data, target, frame = Variable(data), Variable(target), Variable(frame)
-            
+
             data = torch.cat((frame, data), dim=1)
-            target_i = model(data)    
-        
+            target_i = model(data)
+
             target_j = target_i
-            
+
             target_j = target_j.cpu().squeeze(0).numpy()
-            
+
             sample_pred["pred"] = target_j
-                
+
             pred_samples.append(sample_pred)
     return pred_samples

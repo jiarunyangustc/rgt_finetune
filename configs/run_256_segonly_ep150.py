@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# 256³ combo：把 512³ 最优策略全套搬到原生 256³
-#   segqc3 过滤 + seg 权重 0.3 + 仅 loss 策略(seg0.3+pair0.1), 无混合方向, 样本数256=与olhr同步数(隔离loss)
-# regime 与 olhr 基线一致(lr 1e-4/ep150/bs40/cosine)，唯一差别=策略束
+
+
+
 from train_finetune_only import run_experiment
 
 

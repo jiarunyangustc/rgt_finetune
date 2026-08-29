@@ -37,14 +37,14 @@ class Mlp(nn.Module):
         self.fc1 = nn.Linear(in_features, hidden_features)
         if use_lora:
             self.fc1 = lora.Linear(in_features, hidden_features, r=lora_rank)
-        
+
         self.dwconv = DWConv(hidden_features)
         self.act = act_layer()
-        
+
         self.fc2 = nn.Linear(hidden_features, out_features)
         if use_lora:
             self.fc2 = lora.Linear(hidden_features, out_features, r=lora_rank)
-        
+
         self.drop = nn.Dropout(drop)
 
         self.apply(self._init_weights)
@@ -152,7 +152,7 @@ class Block(nn.Module):
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
             attn_drop=attn_drop, proj_drop=drop, sr_ratio=sr_ratio,
             use_lora=use_lora, lora_rank=lora_rank)
-        
+
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
@@ -228,7 +228,7 @@ class OverlapPatchEmbed(nn.Module):
         return x, H, W
 
 
-    
+
 
 class MixVisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dims=[64, 128, 256, 512],

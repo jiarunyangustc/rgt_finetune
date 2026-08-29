@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""zxdata 128^3 角块 RGT 渲染(workflow 最右输出格素材, 与 dip_cube 同窗同视角)
-用法: python render_zx_rgt_cube.py [--origin 64,64,64] [--size 128]
+"""Render an RGT subvolume for the workflow figure.
+Usage: python render_zx_rgt_cube.py [--origin 64,64,64] [--size 128]
               [--cmap jet] [--rgt <path>]
-输出: qc_overlays/zx_rgt_cube_<size>_<cmap>.png (白底, 无文字)
+Output: qc_overlays/zx_rgt_cube_<size>_<cmap>.png.
 """
 import argparse
 import numpy as np
@@ -23,10 +23,10 @@ X1, Y1, Z1 = X0 + M, Y0 + M, Z0 + M
 
 rg = np.fromfile(a.rgt, np.float32).reshape(256, 256, 256).astype(np.float64)
 crop = np.maximum.accumulate(rg[X0:X1, Y0:Y1, Z0:Z1], axis=2)
-# 深度校准: 让色带沿深度均匀(单调重映射, 等值面不变)
+
 prof = np.maximum.accumulate(crop.mean(axis=(0, 1)))
 zt = np.linspace(0, 1, M)
-cal = np.interp(rg, prof, zt)          # 整体重映射, 三面取值一致
+cal = np.interp(rg, prof, zt)
 
 xs, ys, zs = np.arange(X0, X1), np.arange(Y0, Y1), np.arange(Z0, Z1)
 

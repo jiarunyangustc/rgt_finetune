@@ -49,16 +49,16 @@ def _segment_flatten_loss_one(pred, seg, loss_type, beta, min_points,
     pred_valid = pred_flat[valid_mask]
     seg_valid = seg_flat[valid_mask]
 
-    # 深度加权：dim0 视为深度轴，segment 平均深度越大权重越高
-    # w = 1 + gamma * (depth/H)，gamma=0 时完全退化为原行为
+
+
     depth_valid = None
     if depth_weight_gamma > 0:
         H = pred.shape[0]
         zgrid = torch.arange(H, device=pred.device, dtype=pred.dtype)
         depth_flat = zgrid.view(-1, *([1] * (pred.dim() - 1))).expand_as(pred).reshape(-1)
         depth_valid = depth_flat[valid_mask]
-    # 质量加权：qual 为逐像素权重图（与 pred 同形），段内取均值作为该段权重，
-    # 归一化加权（/sum w）——低权段以折扣参与，不稀释高权段的约束。qual=None 时退化为原行为
+
+
     qual_valid = None
     if qual is not None:
         qual_valid = qual.reshape(-1)[valid_mask]
@@ -173,10 +173,10 @@ def compute_SegmentLoss(input, segment, loss_type="SmoothL1", beta=0.01,
         "Expect input and segment shapes [B,1,...]"
 
     if cross_slice:
-        # 跨切片分组: 整个 batch 一次 flatten, 全局 segment ID 使同一物理段
-        # 在相邻切片间共用同一个中心 —— 提供跨片积分偏置耦合。
-        # 前提: batch 为相邻切片(shuffle=False)且 segment ID 跨切片全局一致。
-        # permute 把深度轴放到 dim0, 保持 depth_weight_gamma 的 zgrid 语义正确。
+
+
+
+
         loss, valid = _segment_flatten_loss_one(
             input[:, 0].permute(1, 0, 2), segment[:, 0].permute(1, 0, 2),
             loss_type, beta, min_points, equal_segment_weight, detach_center,

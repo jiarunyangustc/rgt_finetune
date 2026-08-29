@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# lunnan pair: inline 方向 416 片, 5 条层位(补空缺) + 新 strongaxis segments
+
 from train_finetune_only import run_experiment
 
 

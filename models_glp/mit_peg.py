@@ -54,7 +54,7 @@ class Mlp(nn.Module):
         x = self.drop(x)
         return x
 
-    
+
 class PEG(nn.Module):
     def __init__(self, dim=256, k=3):
         super().__init__()
@@ -174,7 +174,7 @@ class Block(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x), H, W))
 
         return x
-    
+
 class PA(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -183,7 +183,7 @@ class PA(nn.Module):
 
     def forward(self, x):
         return x * self.sigmoid(self.pa_conv(x))
-    
+
 
 class OverlapPatchEmbed(nn.Module):
     """ Image to Patch Embedding
@@ -233,7 +233,7 @@ class OverlapPatchEmbed(nn.Module):
         return x, H, W
 
 
-    
+
 
 class MixVisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dims=[64, 128, 256, 512],

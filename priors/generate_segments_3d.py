@@ -131,7 +131,7 @@ DIR_STEP = {'N': (0, -1), 'S': (0, 1), 'E': (1, 0), 'W': (-1, 0)}
 
 
 def get_neighbor_indices(coord, direction, candidate_dict, shape, width=2, dz_center=0):
-    """dz_center: 倾角预测的 z 偏移中心（默认 0 = 原始行为，窗口对称于当前 z）"""
+    """Evaluate a candidate in a depth window centered at ``dz_center``."""
     x, y, z = coord
     dx, dy = DIR_STEP[direction]
     neighbors = []
@@ -145,33 +145,34 @@ def get_neighbor_indices(coord, direction, candidate_dict, shape, width=2, dz_ce
 
 
 def predict_dz(normal, direction, axis_map):
-    """由局部法向预测沿 direction 走一步的 z 偏移（四舍五入到整数采样点）。
+    """Predict the integer depth shift for one lateral step.
 
-    平面法向 n 满足 n·(dx,dy,dz)=0 => dz = -(n_x*dx + n_y*dy) / n_z。
-    axis_map: (ix, iy, iz) —— normal 向量中对应体数据 x/y/z 轴的分量下标。
+    The local plane normal satisfies ``n dot (dx,dy,dz)=0``; therefore
+    ``dz=-(n_x*dx+n_y*dy)/n_z``. ``axis_map`` maps volume axes to normal
+    components.
     """
     dx, dy = DIR_STEP[direction]
     ix, iy, iz = axis_map
     nz = float(normal[iz])
-    if abs(nz) < 0.3:   # 近垂直构造（法向躺平），预测不可靠，退回不引导
+    if abs(nz) < 0.3:
         return 0
     dz = -(float(normal[ix]) * dx + float(normal[iy]) * dy) / nz
     return int(round(np.clip(dz, -8, 8)))
 
 
 def infer_normal_axis_map(candidate_norms):
-    """推断 normal 分量与体数据轴的对应：|均值| 最大的分量是深度(z)方向。"""
+    """Infer the normal-component mapping from mean absolute components."""
     mean_abs = np.mean(np.abs(candidate_norms), axis=0)
     iz = int(np.argmax(mean_abs))
     rest = [k for k in range(3) if k != iz]
     axis_map = (rest[0], rest[1], iz)
-    print('normal 分量 |mean|=%s -> 深度分量 idx=%d, axis_map(x,y,z)=%s' % (
+    print('normal-component |mean|=%s -> depth index=%d, axis_map(x,y,z)=%s' % (
         np.round(mean_abs, 3).tolist(), iz, axis_map), flush=True)
     return axis_map
 
 
 def prune_surface_points(surface_points, resid_thr, xy_radius=4, min_neighbors=5):
-    """面级清洗：每点与其 xy 邻域(切比雪夫半径)内点的中位 z 比较，残差超阈值剔除。"""
+    """Remove points whose depth differs excessively from a local median."""
     xy2z = {}
     for (x, y, z) in surface_points:
         xy2z[(x, y)] = z
@@ -262,9 +263,9 @@ def grow_surfaces_multi_rounds(
     axis_map = None
     if dip_guided:
         axis_map = infer_normal_axis_map(sorted_norms)
-        print('倾角引导开启: 搜索窗以法向预测 z 为中心, 半宽=%d' % dip_window, flush=True)
+        print('Dip-guided tracking enabled; depth half-window=%d' % dip_window, flush=True)
     if prune_resid > 0:
-        print('面级清洗开启: xy 半径=%d 中位 z 残差 > %.1f 采样点的点剔除' % (prune_radius, prune_resid), flush=True)
+        print('Patch pruning enabled: xy radius=%d, maximum median-depth residual=%.1f samples' % (prune_radius, prune_resid), flush=True)
 
     def wave_at(sorted_idx):
         return candidate_waves[int(sorted_original_indices[sorted_idx])]
@@ -412,7 +413,7 @@ def grow_surfaces_multi_rounds(
                 kept_set = set(kept)
                 for p in surface_points:
                     if p not in kept_set:
-                        used.discard(p)   # 释放被剔除的点，允许其他面认领
+                        used.discard(p)
                 surface_points = kept
 
         if len(surface_points) >= min_surface_size:
@@ -521,13 +522,13 @@ def main():
     parser.add_argument('--max-seeds', type=int, default=None, help='debug only: process only top-N seeds')
     parser.add_argument('--no-combine', action='store_true')
     parser.add_argument('--dip-guided', action='store_true',
-                        help='用法向预测邻列 z 位置，搜索窗中心随倾角移动（推荐，抑制跳轴）')
+                        help='center the search window using the normal-predicted depth')
     parser.add_argument('--dip-window', type=int, default=1,
-                        help='倾角引导模式下的 z 搜索半宽（默认 1，替代 --width）')
+                        help='depth half-window in dip-guided mode (default: 1)')
     parser.add_argument('--prune-resid', type=float, default=0.0,
-                        help='面级清洗：与 xy 邻域中位 z 的残差超过该采样点数则剔除（0=关闭，推荐 2.5）')
+                        help='remove points exceeding this local median-depth residual; 0 disables')
     parser.add_argument('--prune-radius', type=int, default=4,
-                        help='面级清洗的 xy 邻域切比雪夫半径')
+                        help='Chebyshev xy radius used for patch pruning')
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)

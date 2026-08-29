@@ -1,16 +1,11 @@
 #!/usr/bin/env python
-"""
-δ 场预计算: PWD 跨片倾角 -> 512 训练用 pair dip 体 + warp 方向单元测试
-=====================================================================
-输入: pwd_dipx_256.npy (x,y,z 原生, px/片, 已 QC: 与地震互相关仲裁一致)
-输出: pair_dip_512.npy, 布局 (y=xline切片, z, x) 512^3 float32,
-      dip[i] = 切片 i 与 i+1 之间的下移量 δ(z,x), 值域截断 ±4。
-      数值约定: px512 / 512片距 (与原生 px/片 数值相等, 已推导)。
-      warp 约定: pred_{i+1}(z + δ, x) ≈ pred_i(z, x)。
+"""Upsample native-grid PWD dips and validate the warp convention.
 
-单元测试(关键, δ 仅 ~0.4px, 符号/朝向错了等价性实验会"假通过"):
-用 ux_gh 真值验证 warp 后邻片差在 |δ| 大的子集上应显著小于同位置差,
-且符号翻转版应变差。
+The output has layout ``(section, depth, trace)``. ``dip[i]`` is the downward
+shift from section ``i`` to ``i+1``, clipped to +/-4 depth samples. The unit
+test verifies that dip compensation reduces the adjacent-section RGT
+difference where the shift magnitude exceeds 0.5 samples and that reversing
+the sign makes the alignment worse.
 """
 import numpy as np
 from scipy.ndimage import zoom
@@ -21,7 +16,7 @@ OUT = '../data/zxdata/pair_dip_512.npy'
 
 
 def warp_z(B, d):
-    """B,d: (z,x); 返回 B(z+d, x) 线性插值, 越界=边界值"""
+    """Linearly sample B(z+d, x), using boundary values outside the range."""
     Z = B.shape[0]
     z = np.arange(Z)[:, None] + d
     z0 = np.clip(np.floor(z).astype(int), 0, Z - 1)
@@ -38,28 +33,28 @@ def unit_test(dip):
         A = u[:, y, :].T
         B = u[:, y + 1, :].T
         dl = dip[:, y, :].T
-        m = np.abs(dl) > 0.5                     # 只在 δ 有实质意义处考核
+        m = np.abs(dl) > 0.5
         if m.sum() < 100:
             continue
         d_same.append(np.abs(B - A)[m])
         d_warp.append(np.abs(warp_z(B, dl) - A)[m])
         d_flip.append(np.abs(warp_z(B, -dl) - A)[m])
     ds = np.concatenate(d_same); dw = np.concatenate(d_warp); df = np.concatenate(d_flip)
-    print(f"[unittest] |δ|>0.5 子集 n={ds.size}: 同位置差 med {np.median(ds):.5f} | "
-          f"warp后 {np.median(dw):.5f} | 符号翻转 {np.median(df):.5f}")
+    print(f"[test] |delta|>0.5 subset n={ds.size}: same-position median {np.median(ds):.5f} | "
+          f"warped {np.median(dw):.5f} | reversed {np.median(df):.5f}")
     ok = np.median(dw) < np.median(ds) < np.median(df)
-    print(f"[unittest] {'通过: warp<同位置<翻转' if ok else '!!! 失败: 朝向或符号有问题'}")
+    print(f"[test] {'passed: warped < same-position < reversed' if ok else 'failed: check axis and sign'}")
     return ok
 
 
 def main():
-    dip = np.load(DIP_PATH).astype(np.float32)              # (x, y, z) 原生
+    dip = np.load(DIP_PATH).astype(np.float32)
     if not unit_test(dip):
         raise SystemExit(1)
     dip512 = zoom(np.clip(dip, -4, 4), 2.0, order=1)[:512, :512, :512]
     out = np.ascontiguousarray(dip512.transpose(1, 2, 0))   # (y, z, x)
     np.save(OUT, out)
-    print(f"[make] 已存 {OUT} shape={out.shape} "
+    print(f"[write] saved {OUT}, shape={out.shape} "
           f"|δ| med {np.median(np.abs(out)):.3f} p99 {np.percentile(np.abs(out),99):.3f}")
 
 

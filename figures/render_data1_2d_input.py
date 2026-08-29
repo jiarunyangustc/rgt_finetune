@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-"""data1_2d_input 整图重绘(论文口径, SR3 主实验, 全局取值, 小窗 [55,115])
-行: Direct / +Horizon / +Segment / +Structure(SR3)
-列: Inputs and constraints | Predicted RGT | Isochron overlay |
-    Input-horizon fit | Validation-horizon fit(小窗 h4)
-用法: python render_data1_2d_input.py [--notext] [--no-arrows]
-输出: qc_overlays/data1_2d_input_v2{_notext}.png
+"""Render the Survey-1 input-section comparison used in the manuscript.
+
+Rows show direct prediction and the cumulative addition of horizon, segment,
+and structure constraints. Usage: python render_data1_2d_input.py [--notext]
+[--no-arrows]. Output: qc_overlays/data1_2d_input_v2{_notext}.png.
 """
 import sys
 import numpy as np

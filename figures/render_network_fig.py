@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-"""network.png 重绘(修正版): LoRA + 选定卷积微调配置示意
-修正: stage3 SRConv=Frozen; stage4 无 SRConv; decoder=Frozen(灰);
-输入=地震剖面+层位通道。输出 qc_overlays/network_v2.png
+"""Render the LoRA-plus-convolution fine-tuning schematic.
+
+The decoder is frozen and the input consists of a seismic section and an
+interpreted-horizon channel. Output: qc_overlays/network_v2.png.
 """
 import numpy as np
 import matplotlib
@@ -35,9 +36,9 @@ def arrow(p0, p1, lw=2.4, color='black'):
                                  lw=lw, color=color, shrinkA=0, shrinkB=0))
 
 
-# ================= 顶部: 主流程 =================
+
 TOP_Y0, TOP_H = 0.585, 0.375
-# --- 编码器容器 ---
+
 EX0, EX1 = 0.185, 0.660
 box(EX0 - 0.012, TOP_Y0 - 0.015, EX1 - EX0 + 0.024, TOP_H + 0.03, LAV, '#3949ab',
     lw=1.8, ls=(0, (5, 4)))
@@ -67,7 +68,7 @@ mid_y = (ROW_Y['sr'] + ROW_Y['ffn'] + BH) / 2
 for i in range(3):
     arrow((stage_x[i] + SW + 0.002, mid_y), (stage_x[i + 1] - 0.002, mid_y))
 
-# --- 输入缩略图: 地震 + 层位通道 ---
+
 D = '../data/zxdata/'
 N = 256
 sx = np.fromfile(D + 'sx_256x256x256.dat', np.float32).reshape(N, N, N)
@@ -93,7 +94,7 @@ ax.text(0.0855, 0.925, 'Seismic section\n+ horizon channel', ha='center',
         va='center', fontsize=15, fontweight='bold')
 arrow((0.146, mid_y), (EX0 - 0.014, mid_y))
 
-# --- 解码器(冻结) 与输出 ---
+
 DX = EX1 + 0.028
 box(DX, mid_y - 0.085, 0.085, 0.17, GRAY, GREDGE, 'GLPN\ndecoder\n(Frozen)',
     fs=14.5, lw=1.8)
@@ -114,7 +115,7 @@ ax.text(0.8525, 0.925, 'RGT prediction', ha='center', va='center',
         fontsize=15, fontweight='bold')
 arrow((DX + 0.087, mid_y), (0.793, mid_y))
 
-# --- 图例 ---
+
 LX, LY = 0.775, 0.535
 for k, (fc, ec, t) in enumerate([(GREEN, GEDGE, 'LoRA fine-tuning (trainable)'),
                                  (BLUE, BEDGE, 'Full fine-tuning (trainable)'),
@@ -124,7 +125,7 @@ for k, (fc, ec, t) in enumerate([(GREEN, GEDGE, 'LoRA fine-tuning (trainable)'),
     ax.text(LX + 0.032, y + 0.014, t, ha='left', va='center', fontsize=13.5)
 box(LX - 0.015, LY - 2 * 0.045 - 0.016, 0.235, 0.145, 'none', '#9e9e9e', lw=1.2)
 
-# ================= 底部: zoom-in =================
+
 ZX0, ZY0, ZW, ZH = 0.028, 0.045, 0.70, 0.44
 box(ZX0, ZY0, ZW, ZH, 'none', '#1e88e5', lw=1.6, ls=(0, (6, 4)))
 ax.text(ZX0 + 0.012, ZY0 + ZH - 0.035,

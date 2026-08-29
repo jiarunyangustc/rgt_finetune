@@ -8,3 +8,9 @@ models_glp/weights/
 *.log
 logs*/
 qc_overlays/
+examples/_synthetic_case/
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/

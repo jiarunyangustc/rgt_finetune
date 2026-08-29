@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 单变量对照：与 segqc3_only_a005 唯一差别 a3 seg 权重 0.05 → 0.3（探上限第三点）
+
 from train_finetune_only import run_experiment
 
 

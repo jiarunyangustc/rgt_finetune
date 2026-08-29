@@ -1,0 +1,24 @@
+name: rgt-finetune
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pytorch=2.2
+  - torchvision
+  - pytorch-cuda=12.1
+  - numpy=1.26
+  - scipy=1.12
+  - scikit-image=0.22
+  - matplotlib=3.8
+  - plotly=5.18
+  - pillow=10.2
+  - tqdm=4.66
+  - pip
+  - pip:
+      - loralib==0.1.2
+      - timm==0.4.5
+      - mmcv==1.5.0
+      - pyseistr==0.1.0
+      - pytest>=8.0

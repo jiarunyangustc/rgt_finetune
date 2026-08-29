@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# 单变量对照：与 pairw01 唯一差别 = pair loss 换 dip 补偿版（δ 场来自 PWD）。
-# 目的：验证"沿构造方向一致"一般式在缓倾工区退化等价于同位置版（论文防御用）。
-# 预期：与 pairw01 打平（|δ| med 0.19px, p99 1.0px, warp≈恒等的小扰动）。
+
+
+
 from train_finetune_only import run_experiment
 
 

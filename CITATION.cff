@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the accompanying article."
+title: "Multi-source constrained fine-tuning for relative geologic time estimation"
+type: software
+authors:
+  - family-names: Yang
+    given-names: Jiarun
+  - family-names: Wu
+    given-names: Xinming
+  - family-names: Gao
+    given-names: Hui
+repository-code: "https://github.com/REPLACE_WITH_ACCOUNT/rgt_finetune_release"
+version: 0.1.0
+date-released: 2026-08-26
+keywords:
+  - relative geologic time
+  - seismic interpretation
+  - transfer learning
+  - LoRA
+  - structural constraint

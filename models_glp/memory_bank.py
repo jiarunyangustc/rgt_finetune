@@ -5,10 +5,10 @@ import torch.nn.functional as F
 
 class MemoryEncoder(nn.Module):
     """
-    将 encoder 瓶颈层特征 (conv4, 512-ch) 压缩为紧凑的记忆条目。
-    可选地融合当前 RGT 预测图，使记忆携带语义信息。
+    Compress encoder bottleneck features (conv4, 512 channels) into a compact
+    memory entry. The current RGT prediction can optionally be fused into it.
 
-    SAM2 对应模块: memory_encoder
+    The design follows the memory-encoder role in SAM2.
     """
 
     def __init__(self, in_channels: int = 512, mem_channels: int = 256):
@@ -26,8 +26,8 @@ class MemoryEncoder(nn.Module):
     def forward(self, feat: torch.Tensor,
                 rgt_pred: torch.Tensor = None) -> torch.Tensor:
         """
-        feat     : B × in_channels × H × W  (encoder 瓶颈特征 conv4)
-        rgt_pred : B × 1 × H' × W'          (当前剖面 RGT 预测, 可选)
+        feat     : B x in_channels x H x W (encoder bottleneck features)
+        rgt_pred : B x 1 x H' x W' (optional current-section RGT prediction)
         returns  : B × mem_channels × H × W
         """
         if rgt_pred is not None:
@@ -41,8 +41,7 @@ class MemoryEncoder(nn.Module):
 
 class MemoryAttentionLayer(nn.Module):
     """
-    单层 Transformer: Self-Attn → Cross-Attn(→记忆库) → FFN
-    结构与 SAM2 的 MemoryAttentionLayer 保持一致。
+    One transformer layer: self-attention, memory cross-attention, and FFN.
     """
 
     def __init__(self, d_model: int, mem_dim: int,
@@ -68,8 +67,8 @@ class MemoryAttentionLayer(nn.Module):
 
     def forward(self, x: torch.Tensor, mem: torch.Tensor) -> torch.Tensor:
         """
-        x   : B × N × d_model   (当前剖面展平的空间 token)
-        mem : B × M × mem_dim   (所有历史剖面拼接的记忆 token)
+        x   : B x N x d_model (flattened current-section tokens)
+        mem : B x M x mem_dim (concatenated memory tokens)
         """
         x2, _ = self.self_attn(x, x, x)
         x = self.norm1(x + x2)
@@ -83,14 +82,13 @@ class MemoryAttentionLayer(nn.Module):
 
 class MemoryAttention(nn.Module):
     """
-    将当前剖面的 encoder 瓶颈特征以 Cross-Attention 方式条件化到
-    历史剖面的记忆库上。
+    Condition the current encoder bottleneck features on previous-section
+    memory entries through cross-attention.
 
-    SAM2 对应模块: memory_attention
-    用法:
+    The design follows the memory-attention role in SAM2. Example:
         conditioned_conv4 = memory_attn(conv4, memory_bank)
-        其中 memory_bank 是外部维护的 list[Tensor]，每项形状
-        为 B × mem_channels × H × W，由 MemoryEncoder 生成。
+        Here memory_bank is an externally maintained list of tensors produced
+        by MemoryEncoder, each with shape B x mem_channels x H x W.
     """
 
     def __init__(self, feat_channels: int = 512, mem_channels: int = 256,
@@ -101,16 +99,16 @@ class MemoryAttention(nn.Module):
             for _ in range(num_layers)
         ])
         self.out_norm = nn.LayerNorm(feat_channels)
-        # 可学习门控：初始化为 atanh(0.3)≈0.31，使 tanh(gate)≈0.3（30% memory 混入）
-        # 若 memory 有害，gate 可学习到 0；若有益，gate 可增大到 1
+
+
         self.gate = nn.Parameter(torch.tensor([0.3095]))
 
     def forward(self, curr_feat: torch.Tensor,
                 memory_bank: list) -> torch.Tensor:
         """
         curr_feat   : B × C × H × W
-        memory_bank : list of (B × mem_channels × H × W), 长度 ≤ K
-        returns     : B × C × H × W  (记忆条件化后的特征)
+        memory_bank : list of B x mem_channels x H x W tensors, length <= K
+        returns     : B x C x H x W memory-conditioned features
         """
         if not memory_bank:
             return curr_feat
@@ -127,5 +125,5 @@ class MemoryAttention(nn.Module):
 
         x = self.out_norm(x)
         refined = x.permute(0, 2, 1).reshape(B, C, H, W)
-        # 残差门控：gate=0 时完全保留原始 conv4，随训练逐渐引入 memory 修正量
+
         return curr_feat + torch.tanh(self.gate) * (refined - curr_feat)

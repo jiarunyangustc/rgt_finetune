@@ -31,15 +31,31 @@ ap.add_argument('--frame', required=True, help='horizon frame volume (.dat)')
 ap.add_argument('--centers', required=True, help='frame values of the horizons')
 ap.add_argument('--input-idx', default='', help='indices (into centers) of input horizons')
 ap.add_argument('--valid-idx', default='', help='indices of validation horizons')
-ap.add_argument('--valid-maps', default='', help='extra validation depth maps (.npy, comma sep)')
+ap.add_argument(
+    '--valid-maps', default='',
+    help='extra validation depth maps (.npy, comma separated); included in VALID group',
+)
 ap.add_argument('--tol', type=float, default=1.5e-3)
 a = ap.parse_args()
 
 N1, N2, NZ = (int(v) for v in a.shape.split(','))
 zg = np.arange(NZ, dtype=np.float64)
-vol = np.fromfile(a.volume, np.float32).reshape(N1, N2, NZ)
+expected_size = N1 * N2 * NZ
+vol_flat = np.fromfile(a.volume, np.float32)
+if vol_flat.size != expected_size:
+    raise ValueError(
+        f'{a.volume} contains {vol_flat.size} float32 values; expected '
+        f'{expected_size} for shape {(N1, N2, NZ)}'
+    )
+vol = vol_flat.reshape(N1, N2, NZ)
 PM = np.maximum.accumulate(vol.astype(np.float64), axis=2)
-fr = np.fromfile(a.frame, np.float32).reshape(N1, N2, NZ)
+frame_flat = np.fromfile(a.frame, np.float32)
+if frame_flat.size != expected_size:
+    raise ValueError(
+        f'{a.frame} contains {frame_flat.size} float32 values; expected '
+        f'{expected_size} for shape {(N1, N2, NZ)}'
+    )
+fr = frame_flat.reshape(N1, N2, NZ)
 
 maps, names = [], []
 for k, c in enumerate(float(v) for v in a.centers.split(',')):
@@ -50,6 +66,7 @@ for k, c in enumerate(float(v) for v in a.centers.split(',')):
     z[(z < 2) | (z > NZ - 3)] = np.nan
     maps.append(z)
     names.append(f'h{k + 1}')
+extra_valid_start = len(maps)
 for p in filter(None, a.valid_maps.split(',')):
     maps.append(np.load(p).astype(np.float64))
     names.append(p)
@@ -89,12 +106,14 @@ for nm, Z in zip(names, maps):
     maes.append(np.mean(errs))
     print(f'{nm:24s} level {lv:.5f}  MAE {maes[-1]:.3f}')
 
-def group(tag, idx_str, offset=0):
-    if not idx_str:
+def group(tag, indices):
+    if not indices:
         return
-    idx = [int(v) + offset for v in idx_str.split(',')]
-    print(f'{tag}: {np.mean([maes[i] for i in idx]):.3f} '
-          f'(equal-weight over {[names[i] for i in idx]})')
+    print(f'{tag}: {np.mean([maes[i] for i in indices]):.3f} '
+          f'(equal-weight over {[names[i] for i in indices]})')
 
-group('INPUT  group MAE', a.input_idx)
-group('VALID  group MAE', a.valid_idx)
+input_indices = [int(v) for v in a.input_idx.split(',') if v]
+valid_indices = [int(v) for v in a.valid_idx.split(',') if v]
+valid_indices.extend(range(extra_valid_start, len(maps)))
+group('INPUT  group MAE', input_indices)
+group('VALID  group MAE', valid_indices)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 单变量对照：与 segqc3_only_a03 唯一差别 +跨切片成对一致性 loss (w=0.1, beta=0.02, gap=1)
+
 from train_finetune_only import run_experiment
 
 

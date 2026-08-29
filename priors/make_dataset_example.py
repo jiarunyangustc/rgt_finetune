@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""lunnan 层位子集训练集 (segments 保留不变). 用法: python make_lunnan_subset.py <tag> <keep如0,2>"""
+"""Build a horizon-subset training set while retaining segment labels.
+
+Usage: python make_dataset_example.py <tag> <indices such as 0,2>
+"""
 import os, sys, numpy as np
 L='../data/lunnan/'
 NI,NJ,NZ=416,256,256
@@ -16,7 +19,7 @@ for i in range(NI):
     frame=fr[i].T.astype(np.float32).copy()
     keepmask=np.zeros_like(frame,bool)
     for k in KEEP:
-        keepmask |= (np.abs(frame-CENT[k])<0.012)      # 含 ±ramp(步长0.0079)
+        keepmask |= (np.abs(frame-CENT[k])<0.012)
     frame[~keepmask]=0.0
     mx=np.zeros((len(CENT),NZ,NJ),np.float32)
     for k in KEEP:
@@ -32,4 +35,6 @@ nhz=np.asarray(nhz)
 d0=np.load(os.path.join(OUT,'0.npy'),allow_pickle=True).item()
 u=np.unique(np.round(d0['frame'][d0['frame']!=0],4))
 print(f'{TAG}: keep={KEEP} -> {OUT}')
-print(f'  frame唯一值 {u} | 逐片层位条数 min/中位 {nhz.min()}/{int(np.median(nhz))} | segments非零 {np.mean(d0["segments"]!=0):.4f}')
+print(f'  frame values {u} | horizons per section min/median '
+      f'{nhz.min()}/{int(np.median(nhz))} | nonzero segment fraction '
+      f'{np.mean(d0["segments"] != 0):.4f}')
