@@ -107,8 +107,8 @@ Two weight files are required for field-data fine-tuning:
   released by the SegFormer authors. Download `mit_b4.pth` from the official
   [SegFormer repository](https://github.com/NVlabs/SegFormer#training) and
   place it under `models_glp/weights/`.
-- `rgt_pretrained.pth`: the RGT-pretrained checkpoint (233 MB, model weights
-  only; MD5 `a5c5c729463aff32f07e8085fca0b797`), available from this
+- `rgt_pretrained.pth`: the RGT-pretrained checkpoint (702 MB;
+  MD5 `8f22bb5286718461debbf33566cf51c9`), available from this
   repository's [Releases page](https://github.com/jiarunyangustc/rgt_finetune/releases).
   Point `pretrained_checkpoint` in the experiment configuration to it.
 
